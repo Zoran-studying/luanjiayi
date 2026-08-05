@@ -1,0 +1,15 @@
+{
+  "name": "推免工作台 · PushMian Buddy",
+  "short_name": "PushMian Buddy",
+  "description": "推免（推荐免试研究生）面试全流程助手：题库、重点复习、真题分区、自我介绍、词汇文献、学习台账，支持离线使用。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8f6f3",
+  "theme_color": "#3b6ea5",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
