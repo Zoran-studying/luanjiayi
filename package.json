@@ -1,0 +1,11 @@
+{
+  "name": "pushmian-buddy",
+  "version": "1.0.0",
+  "description": "推免全流程智能工作台",
+  "scripts": {
+    "lint": "eslint js/*.js",
+    "test": "node test.js",
+    "dev": "python -m http.server 8000"
+  },
+  "devDependencies": {}
+}
