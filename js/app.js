@@ -47,13 +47,33 @@ document.addEventListener("click", function(ev){
   document.querySelectorAll(".wordpop").forEach(p => { if(p.style.display !== "none") p.style.display = "none"; });
 });
 
-/* ---- PWA：离线可用（仅 http/https 环境，file:// 自动跳过） ---- */
+/* ---- PWA：离线可用（仅 http/https 环境，file:// 自动跳过）+ 新版本提示 ---- */
+function showUpdatePrompt(){
+  if(document.getElementById("swUpdateBar")) return;
+  const bar = document.createElement("div");
+  bar.id = "swUpdateBar"; bar.className = "updatebar";
+  bar.innerHTML = '<span>📦 发现新版本，点击刷新后生效（新题库/新功能）</span><button onclick="applyUpdate()">立即刷新</button><button class="x" onclick="dismissUpdate()">×</button>';
+  document.body.appendChild(bar);
+}
+function applyUpdate(){ location.reload(); }
+function dismissUpdate(){ const b = document.getElementById("swUpdateBar"); if(b) b.remove(); }
+
 function registerSW(){
   if(!("serviceWorker" in navigator)) return;
   if(location.protocol !== "http:" && location.protocol !== "https:") return;
   if(location.protocol === "http:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW 注册失败（可忽略）", e));
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // 已受控（非首次安装）时，检测到新 SW 安装成功 → 提示刷新
+      if(!navigator.serviceWorker.controller) return;
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener("statechange", () => {
+          if(nw.state === "installed") showUpdatePrompt();
+        });
+      });
+    }).catch(e => console.warn("SW 注册失败（可忽略）", e));
   });
 }
 

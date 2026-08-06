@@ -1,4 +1,4 @@
-const CACHE = "pushmian-buddy-v2";
+const CACHE = "pushmian-buddy-v10";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const ASSETS = [
   "./css/styles.css",
   "./js/data-profile.js",
   "./js/data-questions.js",
+  "./js/data-qa.js",
   "./js/data-vocab.js",
   "./js/data-docs.js",
   "./js/core.js",

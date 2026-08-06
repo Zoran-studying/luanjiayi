@@ -15,7 +15,6 @@ function introReset(){ if(introTimer){ clearInterval(introTimer); introTimer = n
 function voiceStatus(msg, cls){
   const el = $("#voiceStatus");
   if(el){ el.textContent = msg; el.className = "voicestatus " + (cls || "muted"); }
-  try{ console.log("[voice]", msg); }catch(e){}
 }
 function voiceStart(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

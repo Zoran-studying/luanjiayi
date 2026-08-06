@@ -5,29 +5,24 @@ let ivState = null;
 
 function openFullInterview(){
   if(ivState){ renderInterview(); return; }
-  const pickN = (cat, n) => {
-    const pool = S.questions.filter(q => q.cat === cat);
+  // 题量配比读取自「全真模拟设置」（S.settings.ivComp），默认见 core.js IV_COMP_DEFAULT
+  const comp = getIvComp();
+  const list = [];
+  const short = [];
+  IV_COMP_CATS.forEach(c => {
+    const n = comp[c];
+    if(n <= 0) return;
+    const pool = S.questions.filter(q => q.cat === c);
     shuffle(pool);
-    return pool.slice(0, n);
-  };
-  const proCats = ["专业海科","专业海生","专业环市"];
-  const pro = [];
-  proCats.forEach(c => { const p = S.questions.filter(q => q.cat === c); if(p.length) pro.push(p[Math.floor(Math.random() * p.length)]); });
-  // 去重补足：从三个专业分类洗牌后无放回补齐（不会抽到重复题）
-  const proIds = new Set(pro.map(q => q.id));
-  shuffle(S.questions.filter(q => proCats.includes(q.cat))).forEach(q => { if(pro.length >= 3) return; if(!proIds.has(q.id)){ pro.push(q); proIds.add(q.id); } });
-  if(pro.length < 3){ alert("专业题不足 3 题，请先补充题目。"); return; }
-  const basic = pickN("基础", 3);
-  const eng = pickN("英文", 5);
-  const res = pickN("科研深挖", 5);
-  const tr = pickN("翻译", 2);
-  if(basic.length < 3 || eng.length < 5 || res.length < 5 || tr.length < 2){
-    alert("题库题量不足以组成 18 题面试（基础需≥3、英文≥5、科研深挖≥5、翻译≥2、专业≥3），请先补充题目。");
-    return;
-  }
-  const list = [...basic, ...pro.slice(0, 3), ...eng, ...res, ...tr];
-  ivState = { list, i:0, answers:[], marks:{} };
-  flash("全真面试启动：3基础+3专业+5英文+5科研+2翻译");
+    const take = pool.slice(0, n);
+    if(take.length < n) short.push(catName(c) + "缺" + (n - take.length));
+    list.push(...take);
+  });
+  if(list.length < 2){ flash("题库题量不足，请先补充题目再进入全真面试。"); return; }
+  shuffle(list);
+  ivState = { list, i: 0, answers: [], marks: {} };
+  const sum = IV_COMP_CATS.filter(c => comp[c] > 0).map(c => catName(c) + comp[c]).join("+");
+  flash((short.length ? "⚠️ " + short.join("、") + "；" : "") + "全真面试启动：共 " + list.length + " 题（" + sum + "）");
   renderInterview();
 }
 function renderInterview(){
@@ -119,7 +114,7 @@ function renderInterviewResult(){
         <span class="mbtns"><button class="mini" data-act="ivResMark" data-arg="${q.id}|掌握">掌握</button><button class="mini bad" data-act="ivResMark" data-arg="${q.id}|不会">不会</button></span></div>
       <div class="qq">${esc(q.q)}</div>
       <details class="dbans"><summary>你的作答（得分 ${score}）</summary><div class="ansbox">${esc(ua || '（未作答）')}</div></details>
-      <details class="dbans" open><summary>参考答案（点击收起）</summary><div class="ansbox">${esc(q.ans || "")}</div></details>
+      <details class="dbans" open><summary>参考答案（点击收起）</summary><div class="ansbox">${mdHtml(q.ans || "")}</div></details>
     </div>`;
   });
   const { total, avg, level } = scoreTotal();

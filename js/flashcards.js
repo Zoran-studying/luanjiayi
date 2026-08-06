@@ -279,7 +279,7 @@ function closeWbPop(){ const p = document.getElementById("wbPracticePop"); if(p)
 /* ---- 英语听力·随机抽题播报 ---- */
 let enListen = { q:null };
 function enListenHtml(){
-  if(!enListen.q) return '<p class="muted">点上方「随机抽题并语音播报」开始，会用英语朗读一道英文面试题。</p>';
+  if(!enListen.q) return '<p class="muted">点「随机抽题并语音播报」，会用英语朗读一道英文面试题。</p>';
   return `<div class="qitem">
     <div class="qtop"><span class="cat">英文听力</span>
       <span class="mbtns"><button class="mini" onclick="enListenSpeak()">再播报一次</button>
@@ -332,15 +332,47 @@ function enListenPick(){
   flash("正在播报英文面试题…");
 }
 
-/* ---- 文献翻译（应对 placeholder：提示发对话翻译） ---- */
+/* ---- 文献翻译（调用在线翻译 API 逐句翻译，离线时降级提示） ---- */
 function litTranslate(){
   const inp = $("#litInput");
   if(!inp || !inp.value.trim()){ alert("请先粘贴英文段落"); return; }
   const txt = inp.value.trim();
   const o = $("#litOut");
-  if(o) o.innerHTML = `<div class="docout">
+  if(!o) return;
+  o.innerHTML = `<div class="docout">
     <p><b>原文</b><br>${esc(txt)}</p>
-    <p><b>学术翻译（建议）</b><br><span class="muted">提示：长难句先找主干(SVO)再补修饰；专业术语参考模块C词汇库。请将段落发给我（在对话中），我可给出逐句精准译文与面试金句。</span></p>
-    <p><b>可背诵金句提炼</b><br><span class="muted">将你最想记住的1–2句话告诉我，我帮你改写成复试口语版金句。</span></p>
+    <p><b>学术翻译（逐句）</b><br><span class="muted">翻译中...</span></p>
   </div>`;
+  const sentences = txt.split(/(?<=[.?!;])\s+/).filter(s => s.trim());
+  const chunks = [];
+  let buf = "";
+  sentences.forEach(s => {
+    if((buf + " " + s).length > 450){ if(buf) chunks.push(buf); buf = s; }
+    else buf = buf ? buf + " " + s : s;
+  });
+  if(buf) chunks.push(buf);
+  const translateChunk = c => fetchWithRetry("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(c) + "&langpair=en|zh-CN")
+    .then(d => {
+      const t = d && d.responseData && d.responseData.translatedText;
+      if(!t || t === c) return null;
+      if(t.length > 40 && /^[a-zA-Z0-9\s''\-.,;:!?()«»]+$/.test(t)) return null;
+      return t;
+    })
+    .catch(() => null);
+  Promise.all(chunks.map(translateChunk)).then(results => {
+    const fail = results.some(r => r == null);
+    if(fail || !results.length){
+      o.innerHTML = `<div class="docout">
+        <p><b>原文</b><br>${esc(txt)}</p>
+        <p><b>学术翻译</b><br><span class="muted">翻译失败（离线或网络受限）。建议先联网，或把重点句子发给 AI 助手精译。</span></p>
+      </div>`;
+      return;
+    }
+    const zh = results.join("\n");
+    o.innerHTML = `<div class="docout">
+      <p><b>原文</b><br>${esc(txt)}</p>
+      <p><b>学术翻译</b><br>${esc(zh)}</p>
+      <p><b>可背诵金句提炼</b><br><span class="muted">将你最想记住的 1–2 句话复制到对话中，可帮助改写成复试口语版金句。</span></p>
+    </div>`;
+  });
 }
