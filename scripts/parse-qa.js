@@ -183,6 +183,14 @@ const SRC = [
   { file: "锐鉴医学项目文档.md",       cat: "生物信息",    prefix: "qa-bio", mode: "lines" },
 ];
 
+/* ---------- 题干指纹：由内容稳定生成 id，防止在 md 中间插入/删除题时 id 整体漂移 ---------- */
+function hash32(s){
+  s = String(s || "").replace(/\s+/g, "").toLowerCase();
+  let h = 2166136261;
+  for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(16);
+}
+
 const all = [];
 const seenQ = new Set(); // 归一化题干去重
 function add(item, fileShort, prefix){
@@ -191,7 +199,8 @@ function add(item, fileShort, prefix){
   seenQ.add(key);
   item.cat = item.cat || CAT;          // 分类来自所属文件配置
   item.src = fileShort + (item.sec ? " · " + item.sec : "");
-  item.id = prefix + "-" + String(item.n).padStart(3, "0");
+  // 稳定 id：题干内容哈希（内容不变则 id 不变），避免顺序编号导致重生成后的 id 漂移错位
+  item.id = prefix + "-" + hash32(item.q).slice(0, 8);
   all.push(item);
   return true;
 }
@@ -205,6 +214,10 @@ for(const s of SRC){
   const items = s.mode === "bold" ? parseBoldQA(lines) : parseLines(lines);
   const fileShort = s.file.replace(/\.md$/, "");
   CAT = s.cat;
+  /* ---- 迁移说明：id 稳定性 ----
+     v11 起题干改用内容哈希生成稳定 id；老版本为"文件内顺序编号"，
+     曾在 md 中间插入/删除题后重生成导致整文件 id 漂移、用户旧进度错位或产生空壳题。
+     已由 core.js 的"指纹迁移 + 空壳清理"兜底：带进度且同题干的旧 id 会自动回迁。 */
   let n = 0, added = 0;
   items.forEach(it => {
     n++;

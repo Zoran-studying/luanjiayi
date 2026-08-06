@@ -55,11 +55,12 @@ function viewHome(){
   const qById = id => S.questions.find(q => q.id === id);
   const priRank = p => p === "高" ? 0 : p === "中" ? 1 : 2;
   const radar = S.radar.slice().sort((a,b) => priRank(a.priority) - priRank(b.priority));
+  const safeLink = l => /^(https?:\/\/|mailto:)/i.test(l || "") ? `<a href="${esc(l)}" target="_blank" rel="noopener">链接</a>` : (l ? `<span class="muted">${esc(l)}</span>` : "—");
   const radarRows = radar.map(r => `<tr class="${r.priority === '高' ? 'hi' : ''}">
     <td>${esc(r.school)}</td><td>${esc(r.college)}</td><td>${esc(r.major)}</td>
     <td><span class="tag">${esc(r.type)}</span></td>
     <td>${esc(r.deadline)} ${dueBadge(r.deadline)}</td>
-    <td>${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">链接</a>` : "—"}</td>
+    <td>${safeLink(r.link)}</td>
     <td>${r.match === "是" ? '<b class="ok">匹配</b>' : esc(r.match)}</td>
     <td><span class="pri ${r.priority}">${r.priority}</span></td>
     <td>${esc(r.status)}</td><td class="note">${esc(r.note || "")}</td></tr>`).join("");
@@ -120,7 +121,7 @@ function viewHome(){
   <section class="card">
     <div class="cardh">今日完成率 ${prog.pct}%（${prog.done}/${prog.total}）<span class="muted">| 连续打卡 ${stk} 天</span></div>
     <div class="progwrap"><div class="progfill" style="width:${prog.pct}%"></div></div>
-    <p class="muted" style="margin:6px 0 0">完成项 = 自我介绍三件套打卡 + 复习队列已标记（掌握/模糊/不会）。</p>
+    <p class="muted" style="margin:6px 0 0">完成项 = 自我介绍三件套打卡 + 当日模拟面试题已标记 + 复习队列已标记。</p>
   </section>
 
   <section class="card">
@@ -164,7 +165,7 @@ function viewBank(){
   const filterBar = `<div class="filters">
     分类：${cats.map(c => `<button class="chip" data-act="bf" data-arg="cat:${c}">${catName(c)}</button>`).join("")}
     状态：${stat.map(s => `<button class="chip" data-act="bf" data-arg="st:${s}">${s === "收藏" ? "收藏" : s}</button>`).join("")}
-    <input class="search" id="qsearch" placeholder="搜索题干/关键词/来源..." oninput="bankFilter(this.value)"/>
+    <input class="search" id="qsearch" value="${esc(bankFilterState.w || "")}" placeholder="搜索题干/关键词/来源..." oninput="bankFilter(this.value)"/>
     <select class="search" id="qsrc" onchange="bankSrc(this.value)"><option value="">全部来源</option>${srcOpts.map(x => `<option value="${esc(x)}" ${bankFilterState.src === x ? 'selected' : ''}>${esc(x)}</option>`).join("")}</select>
     <button class="btn sm" data-act="randQ">随机抽题</button>
     <button class="btn sm alt" data-act="fullInterview">全真面试模式</button>
@@ -236,7 +237,7 @@ function bankItemHtml(q){
 }
 
 /* ---- 题库筛选/搜索（统一状态机：分类/状态/关键词 一次性重建，chip 高亮） ---- */
-let bankFilterState = { cat:"", st:"全部", src:"" };
+let bankFilterState = { cat:"", st:"全部", src:"", w:"" };
 const BANK_PAGE_SIZE = 30; // 每页题量，避免一次性渲染 1656 题卡顿
 let bankPage = 1;           // 已加载页数
 let bankListCache = [];     // 当前筛选结果缓存（供分页追加）
@@ -259,6 +260,7 @@ function bindBankFoot(list, shown){
 function renderBankList(resetPage){
   const inp = $("#qsearch");
   const w = (inp ? inp.value : "").toLowerCase().trim();
+  bankFilterState.w = w; // 同步搜索词：全量重渲染（如切 tab）后能恢复搜索
   let list = bankApplyFilters();
   if(w) list = list.filter(q => (q.q + " " + (q.ans || "") + " " + (q.src || "")).toLowerCase().includes(w));
   bankListCache = list;
@@ -591,8 +593,11 @@ function viewFocus(){
   const vocabNo = S.vocab.filter(x => x.status === "不会");
   const trNo = S.translate.filter(x => x.status === "不会");
   const wbNo = (S.wordBank || []).filter(w => w.status === "不会");
+  const masteryCard = `<section class="card"><div class="cardh">复习策略：掌握后是否继续强化复习</div>
+    <div class="row"><button class="btn sm ${S.settings.masteryRetire ? 'fire' : ''}" data-act="toggleMastery">${S.settings.masteryRetire ? '✅ 已开启：掌握后不再强化' : '○ 关闭：掌握后仍会回来强化'}</button>
+    <span class="muted">开启后，已掌握题目将不再排期复习，重点复习只保留「不会 / 模糊」；描述请见按钮。「掌握/模糊/不会」标记仍实时生效。</span></div></section>`;
   if(!due.length && !dueSched.length && !dbNo.length && !vocabNo.length && !trNo.length && !wbNo.length){
-    return `<h1 class="h1">重点复习板块</h1>
+    return `<h1 class="h1">重点复习板块</h1>${masteryCard}
     <div class="card"><div class="cardh">暂无【不会】题目</div>
     <p class="muted">在整个工作台任意位置（面试题库A / 真题分区 / 词汇闪卡 / 文献翻译）把题目标记【不会】，都会自动归入本板块。</p>
     <button class="btn" data-tab="bank">前往面试题库 →</button>
@@ -619,7 +624,7 @@ function viewFocus(){
   due.forEach(q => { (groups[q.cat] = groups[q.cat] || []).push(q); });
   let html = `<h1 class="h1">重点复习板块 · 全工作台"不会"自动归档</h1>
   <div class="stat">题库A 不会 ${due.length} | SM-2 到期待复习 ${dueSched.length} | 真题分区 不会 ${dbNo.length} | 专业词汇 不会 ${vocabNo.length} | 文献翻译 不会 ${trNo.length} | 单词不会 ${wbNo.length}。</div>`
-    + dueHtml;
+    + masteryCard + dueHtml;
   Object.keys(groups).forEach(cat => {
     html += `<section class="card"><div class="cardh">${catName(cat)}（${groups[cat].length}）</div>` + groups[cat].map(q => {
       const st = q.status || "未标记";
@@ -707,8 +712,10 @@ function dbMark(id, status){
   const it = dbItem(id);
   if(it){ it.status = status; if(status === "掌握") it.nextReview = ""; else it.nextReview = addDays(todayStr(), INTERVALS[0]); save(); }
 }
+let dbSearchTerm = "";
 function dbFilter(v){
   v = (v || "").toLowerCase();
+  dbSearchTerm = v;
   document.querySelectorAll("#app .dbitem").forEach(el => {
     el.style.display = (!v || el.innerText.toLowerCase().includes(v)) ? "" : "none";
   });
@@ -764,7 +771,7 @@ function viewDocBank(){
 
   <div class="filters">
     <div class="srcbar">${tabs}</div>
-    <input class="search" id="dbSearch" placeholder="搜索题目/关键词..." oninput="dbFilter(this.value)"/>
+    <input class="search" id="dbSearch" value="${esc(dbSearchTerm || "")}" placeholder="搜索题目/关键词..." oninput="dbFilter(this.value)"/>
   </div>
   ${body}`;
 }

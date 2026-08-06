@@ -43,6 +43,19 @@ else ok("sw.js 覆盖全部 " + scripts.length + " 个脚本");
 if(extra.length){ bad("sw.js 预缓存了未引用的文件：" + extra.join(", ")); }
 else ok("sw.js 无多余缓存项");
 
+/* 3. sw.js 缓存版本号与 core.js 的 CONTENT_VER 一致（改内容忘更新缓存会缓存旧代码） */
+console.log("\n== SW 缓存版本一致性 ==");
+const coreSrc = fs.readFileSync(path.join(root, "js", "core.js"), "utf-8");
+const ver = (coreSrc.match(/const CONTENT_VER\s*=\s*(\d+)/) || [])[1];
+const cacheName = (sw.match(/const CACHE\s*=\s*"([^"]+)"/) || [])[1];
+if(ver && cacheName){
+  if(cacheName.indexOf("v" + ver) >= 0) ok("SW 缓存 " + cacheName + " 与 CONTENT_VER=" + ver + " 一致");
+  else bad("SW 缓存名 " + cacheName + " 与 CONTENT_VER=" + ver + " 不一致，请同步升级 sw.js 的 CACHE 名");
+}else{
+  if(!ver) bad("无法从 core.js 解析 CONTENT_VER");
+  if(!cacheName) bad("无法从 sw.js 解析 CACHE 名");
+}
+
 console.log("\n============================");
 console.log("结果：" + pass + " 通过，" + fail + " 失败");
 if(fail > 0) process.exit(1);

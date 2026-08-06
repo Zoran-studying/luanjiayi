@@ -19,6 +19,7 @@ let S = null;          // 全局状态
 let CURTAB = "home";   // 当前模块（标记后原地刷新用）
 let DOCBANK_SRC = null; // 真题分区：当前文档
 let __tabName = "home", __tabStart = Date.now(); // 各板块学习计时
+let __scrollY = 0;                                // 全量重渲染时保留的滚动位置
 
 /* ---------------- 工具 ---------------- */
 function $(sel, root){ return (root || document).querySelector(sel); }
@@ -48,9 +49,11 @@ function mdHtml(raw){
       const isSep = r => /^[\s|:]*:?-{3,}[\s|:-]*$/.test(r.trim());
       const blk = [l]; let j = i + 1;
       while(j < lines.length && lines[j].indexOf("|") >= 0){ blk.push(lines[j]); j++; }
-      if(blk.length >= 2){
-        let head = parse(blk[0]);
-        let rows = [];
+      // 修复：只有块内存在 `---` 分隔行才按表格解析，
+      // 避免把含 |V|/|y| 这类绝对值记号的普通文本（如复杂度）误渲染成错位表格。
+      if(blk.length >= 2 && blk.some(isSep)){
+        const head = parse(blk[0]);
+        const rows = [];
         for(let k = 1; k < blk.length; k++){ if(!isSep(blk[k])) rows.push(parse(blk[k])); }
         i = j;
         out.push("<table class='mdt'><thead><tr>" + head.map(c => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>"
@@ -74,6 +77,16 @@ function mdHtml(raw){
   return out.join("\n");
 }
 function uid(){ return "x" + Math.random().toString(36).slice(2, 9); }
+
+/* ---- 题干指纹（内容哈希）：跨题库重生成的 id 漂移时，用指纹把旧进度迁移到同题干新种子 ----
+   规范化 = 去空白 + 小写 + djb2 32 位哈希 + 长度，同题干必同指纹，碰撞概率可忽略 */
+function fpOf(t){
+  const s = String(t || "").replace(/\s+/g, "").toLowerCase();
+  if(!s) return "";
+  let h = 5381;
+  for(let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16) + "_" + s.length;
+}
 
 /* ---- 轻量代码高亮（答案代码块内部着色：注释/字符串/数字/关键字） ---- */
 const HL_KW = new Set(["const","let","var","function","return","if","else","elif","for","while","do","def","class","new","import","from","as","not","and","or","in","is","None","True","False","self","this","null","undefined","true","false","async","await","try","except","finally","raise","lambda","bool","int","float","str","list","dict","tuple","set","void","struct","enum","with","yield","global","nonlocal","pass","break","continue","switch","case","default","char","double","long","short","unsigned","signed","static","public","private","protected","return","NULL","nullptr"]);
@@ -145,24 +158,39 @@ function compactQuestion(q){
   if(!base) return JSON.parse(JSON.stringify(q)); // 用户自建题：整条保留
   const d = { id: q.id };
   Q_DELTA_KEYS.forEach(k => { if(q[k] !== base[k] && q[k] !== undefined) d[k] = q[k]; });
+  // 有用户进度时才带指纹：未来题库重生成（id 可能漂移）时据此迁移进度，避免错位/丢失
+  if(Object.keys(d).length > 1) d.fp = fpOf(q.q);
   return d;
 }
 function expandQuestions(comps, baseList){
-  const byId = {};
-  (comps || []).forEach(c => { if(c && c.id != null) byId[c.id] = c; });
+  const byId = {}, byFp = {};
+  const compsArr = comps || [];
+  compsArr.forEach(c => { if(c && c.id != null) byId[c.id] = c; if(c && c.fp) byFp[c.fp] = c; });
   const canonIds = new Set();
+  const usedIds = new Set();
   const out = [];
   (baseList || []).forEach(s => {
+    let c = byId[s.id];
+    if(!c && s.q) c = byFp[fpOf(s.q)]; // id 已漂移 → 按题干指纹回迁旧进度
+    if(c) usedIds.add(c.id);
     const o = JSON.parse(JSON.stringify(s));
-    const c = byId[s.id];
     if(c) Q_DELTA_KEYS.forEach(k => { if(c[k] !== undefined) o[k] = c[k]; });
     out.push(o);
     canonIds.add(s.id);
   });
-  (comps || []).forEach(c => { if(c && c.id != null && !canonIds.has(c.id)) out.push(JSON.parse(JSON.stringify(c))); });
+  compsArr.forEach(c => {
+    if(c && c.id != null && !canonIds.has(c.id) && !usedIds.has(c.id)){
+      // 未被任何种子接纳的孤儿项：
+      //  - 用户自建（x/u 开头）保留整条；
+      //  - 引擎题（qa-* 前缀）若已无题干文本（历史 id 漂移产生的空壳）则丢弃，
+      //    避免出现只有 id、没有题干/答案的僵尸题。
+      const engine = /^qa-/.test(String(c.id));
+      if(!engine || (c.q && String(c.q).trim())) out.push(JSON.parse(JSON.stringify(c)));
+    }
+  });
   return out;
 }
-function save(){
+function doSave(){
   try{
     let payload = S;
     if(S && Array.isArray(S.questions)){
@@ -173,6 +201,12 @@ function save(){
     localStorage.setItem(STORE_KEY, JSON.stringify(payload));
   }catch(e){ alert("保存失败：可能是数据过大超出浏览器存储限制（"+e.name+"）。请先导出备份并减少内容。"); }
 }
+let __saveT = null;
+function save(){ // 节流：高频调用合并为一次写入，降低切 tab / 标记时的全量序列化开销
+  if(__saveT) return;
+  __saveT = setTimeout(() => { __saveT = null; doSave(); }, 200);
+}
+function flushNow(){ if(__saveT){ clearTimeout(__saveT); __saveT = null; } doSave(); }
 function load(){
   try{
     const raw = localStorage.getItem(STORE_KEY);
@@ -218,6 +252,7 @@ function ensureState(){
   if(!S.settings.lastActive) S.settings.lastActive = "";
   if(!S.settings.intensity) S.settings.intensity = "normal";
   if(!S.settings.totalPractice) S.settings.totalPractice = 0;
+  if(S.settings.masteryRetire == null) S.settings.masteryRetire = false;
   if(!S.settings.ivComp || typeof S.settings.ivComp !== "object") S.settings.ivComp = {};
   IV_COMP_CATS.forEach(c => { if(S.settings.ivComp[c] == null) S.settings.ivComp[c] = IV_COMP_DEFAULT[c]; });
   S.questions.forEach(q => { if(q.fav == null) q.fav = false; });
@@ -377,11 +412,12 @@ function markQuestion(id, status){
     const wasWeak = prev === "模糊" || prev === "不会";
     q.reviewStage = wasWeak ? Math.min((q.reviewStage || 0) + 1, INTERVALS.length - 1) : 0;
     q.nextReview = addDays(t, INTERVALS[q.reviewStage]);
-  } else { // 掌握：不彻底退出，延长间隔后仍会排期回来强化（SM-2 闭环）
+  } else { // 掌握：默认延长间隔后仍会排期回来强化（SM-2 闭环）；开启「掌握后不再强化」则彻底退出复习
     const st = (q.reviewStage == null) ? 0 : q.reviewStage;
     const ns = Math.min(st + 1, INTERVALS.length - 1);
     q.reviewStage = ns;
-    q.nextReview = addDays(t, INTERVALS[ns]);
+    if(S.settings.masteryRetire) q.nextReview = "";
+    else q.nextReview = addDays(t, INTERVALS[ns]);
   }
   S.settings.totalPractice = (S.settings.totalPractice || 0) + 1;
   save();
@@ -396,11 +432,12 @@ function markVocab(idx, status){
     const wasWeak = v.status === "模糊" || v.status === "不会";
     v.reviewStage = wasWeak ? Math.min((v.reviewStage || 0) + 1, INTERVALS.length - 1) : 0;
     v.nextReview = addDays(t, INTERVALS[v.reviewStage]);
-  } else { // 掌握：不退出，延长间隔后仍回排期强化（SM-2 闭环，与题库一致）
+  } else { // 掌握：默认延长间隔后仍会排期回来强化（SM-2 闭环，与题库一致）；可设置不再强化
     const st = (v.reviewStage == null) ? 0 : v.reviewStage;
     const ns = Math.min(st + 1, INTERVALS.length - 1);
     v.reviewStage = ns;
-    v.nextReview = addDays(t, INTERVALS[ns]);
+    if(S.settings.masteryRetire) v.nextReview = "";
+    else v.nextReview = addDays(t, INTERVALS[ns]);
   }
   v.status = status;
   save();
@@ -436,6 +473,7 @@ function render(tab, after){
   const freshBank = (tab === "bank") && (CURTAB !== "bank"); // 新进题库页才回到第 1 页
   CURTAB = tab; __tabName = tab; __tabStart = Date.now();
   updateBottomNav(tab);
+  __saveScroll();
   const root = $("#app");
   let html = navBar() + `<main class="main">`;
   if(tab === "setup") html += viewSetup();
@@ -450,7 +488,13 @@ function render(tab, after){
   root.innerHTML = html;
   bindCommon();
   if(tab === "bank") renderBankList(freshBank);
+  if(tab === "docbank" && dbSearchTerm) dbFilter(dbSearchTerm); // 恢复真题分区搜索过滤
   if(after) after();
+  // 保留滚动位置（标记/切页全量重渲染后不跳回顶部）
+  try{ window.scrollTo(0, __scrollY); }catch(e){}
+}
+function __saveScroll(){
+  __scrollY = (window.pageYOffset != null ? window.pageYOffset : 0) || document.documentElement.scrollTop || 0;
 }
 function bindCommon(){
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => render(b.dataset.tab));
@@ -525,20 +569,39 @@ function streakDays(){
 }
 function todaysProgress(){
   const d = getDay();
+  const qById = id => S.questions.find(q => q.id === id);
   const si = d.selfIntro || {cn:false,en:false,ppt:false};
   const doneChecks = (si.cn ? 1 : 0) + (si.en ? 1 : 0) + (si.ppt ? 1 : 0);
-  const rev = (d.plan.review || []).map(id => S.questions.find(q => q.id === id)).filter(Boolean);
+  const iv = (d.interview || []).map(qById).filter(Boolean);
+  const markedIv = iv.filter(q => q.status && q.status !== "未标记").length;
+  const rev = (d.plan.review || []).map(qById).filter(Boolean);
   const markedRev = rev.filter(q => q.status && q.status !== "未标记").length;
-  const total = 3 + (rev.length || 0);
-  const done = doneChecks + markedRev;
+  const total = 3 + iv.length + (rev.length || 0);
+  const done = doneChecks + markedIv + markedRev;
   return { done, total, pct: total ? Math.round(done / total * 100) : 100 };
 }
 
 /* ---------------- 行为分发（查表式） ---------------- */
+function refreshCurrent(){
+  // 题库页：只局部重建列表，保留搜索词/页码/滚动位置；其余板块全量重渲染（含滚动保留）
+  if(CURTAB === "bank"){ renderBankList(false); }
+  else render(CURTAB);
+}
 var ACTIONS = {
-  mk: function(arg){ var p = arg.split("|"); markQuestion(p[0], p[1]); flash("已标记：" + p[1]); render(CURTAB); },
-  mv: function(arg){ var p = arg.split("|"); markVocab(parseInt(p[0], 10), p[1]); render(CURTAB); },
-  fav: function(arg){ toggleFav(arg); render(CURTAB); },
+  mk: function(arg){ var p = arg.split("|"); markQuestion(p[0], p[1]); flash("已标记：" + p[1]); refreshCurrent(); },
+  mv: function(arg){ var p = arg.split("|"); markVocab(parseInt(p[0], 10), p[1]); flash("已标记：" + p[1]); refreshCurrent(); },
+  fav: function(arg){ toggleFav(arg); refreshCurrent(); },
+  toggleMastery: function(){
+    S.settings.masteryRetire = !S.settings.masteryRetire;
+    if(S.settings.masteryRetire){
+      S.questions.forEach(function(q){ if(q.status === "掌握") q.nextReview = ""; });
+      S.vocab.forEach(function(v){ if(v.status === "掌握") v.nextReview = ""; });
+      save(); flash("已开启「掌握后不再强化」：已掌握题不会再来复习，并清空现有掌握项的排期");
+    }else{
+      save(); flash("已关闭：掌握后仍会按记忆曲线回来强化复习");
+    }
+    render(CURTAB);
+  },
   spkQ: function(arg){ var q = S.questions.find(function(x){ return x.id === arg; }); if(q) speakZh(q.q + "。" + (q.key || "")); },
   regenDay: function(){
     var old = S.logs[todayStr()] || {}; delete S.logs[todayStr()]; var d = getDay();
@@ -665,7 +728,7 @@ function startup(){
   S.settings.intensity = (!done1 && !done2) ? "low" : "normal";
   save();
   getDay(); // 确保今日数据生成
-  window.addEventListener("beforeunload", () => { try{ flushTabTime(__tabName, __tabStart); save(); }catch(e){} });
+  window.addEventListener("beforeunload", () => { try{ flushTabTime(__tabName, __tabStart); flushNow(); }catch(e){} });
   // 预载 TTS 语音列表
   if(window.speechSynthesis){ try{ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(); }catch(e){} }
   createBottomNav();
