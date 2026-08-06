@@ -35,8 +35,8 @@ function viewSetup(){
     <div class="cardh">填写个人信息</div>
     <div class="setupform">
       <label class="setuplabel">姓名 <input class="setupinput" id="setupName" value="${esc(S.profile.name)}" placeholder="例：张三"/></label>
-      <label class="setuplabel">学校 · 学院 <input class="setupinput" id="setupSchool" value="${esc(S.profile.school)}" placeholder="例：同济大学 · 环境科学与工程学院"/></label>
-      <label class="setuplabel">专业 <input class="setupinput" id="setupMajor" value="${esc(S.profile.major)}" placeholder="例：海洋科学（本科）"/></label>
+      <label class="setuplabel">学校 · 学院 <input class="setupinput" id="setupSchool" value="${esc(S.profile.school)}" placeholder="例：浙江大学 · 计算机科学与技术学院"/></label>
+      <label class="setuplabel">专业 <input class="setupinput" id="setupMajor" value="${esc(S.profile.major)}" placeholder="例：计算机科学与技术（本科）"/></label>
       <label class="setuplabel">GPA <input class="setupinput" id="setupGpa" value="${esc(S.profile.gpa)}" placeholder="例：4.07 / 5.0"/></label>
       <label class="setuplabel">排名 <input class="setupinput" id="setupRank" value="${esc(S.profile.rank)}" placeholder="例：专业第二（绩点/综测）"/></label>
     </div>
@@ -53,7 +53,8 @@ function viewSetup(){
 function viewHome(){
   const d = getDay();
   const qById = id => S.questions.find(q => q.id === id);
-  const radar = S.radar.slice().sort((a,b) => (a.priority === "高" ? -1 : 1) - (b.priority === "高" ? -1 : 1));
+  const priRank = p => p === "高" ? 0 : p === "中" ? 1 : 2;
+  const radar = S.radar.slice().sort((a,b) => priRank(a.priority) - priRank(b.priority));
   const radarRows = radar.map(r => `<tr class="${r.priority === '高' ? 'hi' : ''}">
     <td>${esc(r.school)}</td><td>${esc(r.college)}</td><td>${esc(r.major)}</td>
     <td><span class="tag">${esc(r.type)}</span></td>
@@ -63,9 +64,9 @@ function viewHome(){
     <td><span class="pri ${r.priority}">${r.priority}</span></td>
     <td>${esc(r.status)}</td><td class="note">${esc(r.note || "")}</td></tr>`).join("");
 
-  const reviewItems = (d.plan.review || []).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)} <span class="mini">[${catName(q.cat)}]</span></li>`).join("") || "<li class='muted'>暂无可复习项（去标记模糊/不会的题目会自动进入）</li>";
-  const newItems = (d.plan.newInterview || []).slice(0, 3).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)}</li>`).join("") || "<li class='muted'>—</li>";
-  const consItems = (d.plan.consolidate || []).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)}</li>`).join("") || "<li class='muted'>—</li>";
+  const reviewItems = (d.plan.review || []).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)} <span class="mini">[${catName(q.cat)}]</span>${srcTag(q)}</li>`).join("") || "<li class='muted'>暂无可复习项（去标记模糊/不会的题目会自动进入）</li>";
+  const newItems = (d.plan.newInterview || []).slice(0, 3).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)}${srcTag(q)}</li>`).join("") || "<li class='muted'>—</li>";
+  const consItems = (d.plan.consolidate || []).map(qById).filter(Boolean).map(q => `<li>${esc(q.q)}${srcTag(q)}</li>`).join("") || "<li class='muted'>—</li>";
 
   const si = d.selfIntro || {cn:false,en:false,ppt:false};
   const siBox = `<div class="sibox">
@@ -83,9 +84,10 @@ function viewHome(){
   iv.forEach(q => { (ivGroups[q.cat] = ivGroups[q.cat] || []).push(q); });
   const ivHtml = Object.keys(ivGroups).map(cat => {
     const items = ivGroups[cat].map(q => `<li><b>${esc(q.q)}</b>
-      <div class="ivans"><span class="lab">参考</span><span class="editable" contenteditable="true" data-eid="${q.id}">${esc(q.ans || "")}</span></div>
-      <div class="ivans tip"><span class="lab">加分</span>${esc(q.tip)}</div>
-      <div class="ivans pit"><span class="lab">避坑</span>${esc(q.pit)}</div>
+      ${srcTag(q)}
+      <details class="dbans"><summary><span class="lab">参考答案</span><span class="muted">${(q.ans || "").length > 160 ? "（长答案，点击展开）" : ""}</span></summary><div class="ivans"><span class="editable" contenteditable="true" data-eid="${q.id}">${mdHtml(q.ans || "")}</span></div></details>
+      ${q.tip ? `<div class="ivans tip"><span class="lab">加分</span>${esc(q.tip)}</div>` : ""}
+      ${q.pit ? `<div class="ivans pit"><span class="lab">避坑</span>${esc(q.pit)}</div>` : ""}
       ${q.extra ? `<div class="ivans extra"><span class="lab">思考</span>${esc(q.extra)}</div>` : ""}
       <span class="mbtns">
         <button class="mini" data-act="mk" data-arg="${q.id}|掌握">已掌握</button>
@@ -102,7 +104,7 @@ function viewHome(){
   return `
   ${enc}
   <div class="cmdbar">
-    <button class="cmd" data-tab="home">今日计划</button>
+    <button class="cmd" data-jump="home" data-anchor="planSec">今日计划</button>
     <button class="cmd" data-act="regenDay">抽题模拟面试</button>
     <button class="cmd fire" data-tab="focus">重点复习</button>
     <button class="cmd" data-tab="docbank">真题分区</button>
@@ -127,11 +129,11 @@ function viewHome(){
     <button class="btn sm" data-act="addRadar">+ 新增通知</button>
   </section>
 
-  <section class="card">
+  <section class="card" id="planSec">
     <div class="cardh">今日学习计划（三栏待办）</div>
     <div class="three">
       <div class="col"><div class="colh new">新学内容</div><ul>${newItems}<li>新词汇：<b>${esc(d.plan.newVocab || "")}</b></li><li>文献：<b>${esc(d.plan.paper || "")}</b></li></ul></div>
-      <div class="col"><div class="colh rev">复习内容（模糊/不会优先）</div><ul>${reviewItems}</ul></div>
+      <div class="col"><div class="colh rev">复习内容（SM-2 到期待复习）</div><ul>${reviewItems}</ul></div>
       <div class="col"><div class="colh con">巩固内容（已掌握随机3道）</div><ul>${consItems}</ul></div>
     </div>
   </section>
@@ -139,7 +141,7 @@ function viewHome(){
   ${siBox}
 
   <section class="card">
-    <div class="cardh">今日模拟面试习题（中文 ${iv.filter(q => ["基础","专业海科","专业海生","专业环市","科研深挖"].includes(q.cat)).length} + 英文 ${iv.filter(q => q.cat === "英文").length} + 翻译 ${iv.filter(q => q.cat === "翻译").length}）</div>
+    <div class="cardh">今日模拟面试习题（中文 ${iv.filter(q => ["基础","数据结构","计算机组成原理","操作系统","计算机网络","深度学习","AI智能体","项目经历","生物信息","科研深挖"].includes(q.cat)).length} + 英文 ${iv.filter(q => q.cat === "英文").length} + 翻译 ${iv.filter(q => q.cat === "翻译").length}）</div>
     ${ivHtml}
     <div class="row">
       <button class="btn" data-act="regenDay">重新生成今日面试</button>
@@ -155,12 +157,15 @@ function viewHome(){
    ============================================================ */
 function viewBank(){
   if(!bankFilterState) bankFilterState = { cat:"", st:"全部" }; // 仅首次进入时初始化，切换 tab 不丢筛选状态
-  const cats = ["基础","专业海科","专业海生","专业环市","科研深挖","英文","翻译","词汇翻译"];
+  const cats = ["基础","数据结构","计算机组成原理","操作系统","计算机网络","深度学习","AI智能体","项目经历","生物信息","科研深挖","英文","翻译","词汇翻译"];
   const stat = ["全部","未标记","掌握","模糊","不会","收藏"];
+  const comp = getIvComp();
+  const srcOpts = [...new Set(S.questions.map(q => (q.src || "").split(" · ")[0]).filter(Boolean))].sort();
   const filterBar = `<div class="filters">
     分类：${cats.map(c => `<button class="chip" data-act="bf" data-arg="cat:${c}">${catName(c)}</button>`).join("")}
     状态：${stat.map(s => `<button class="chip" data-act="bf" data-arg="st:${s}">${s === "收藏" ? "收藏" : s}</button>`).join("")}
-    <input class="search" id="qsearch" placeholder="搜索题干/关键词..." oninput="bankFilter(this.value)"/>
+    <input class="search" id="qsearch" placeholder="搜索题干/关键词/来源..." oninput="bankFilter(this.value)"/>
+    <select class="search" id="qsrc" onchange="bankSrc(this.value)"><option value="">全部来源</option>${srcOpts.map(x => `<option value="${esc(x)}" ${bankFilterState.src === x ? 'selected' : ''}>${esc(x)}</option>`).join("")}</select>
     <button class="btn sm" data-act="randQ">随机抽题</button>
     <button class="btn sm alt" data-act="fullInterview">全真面试模式</button>
     <button class="btn sm fire" data-act="focusReview">重点复习（不会 ${S.questions.filter(q => q.status === "不会").length}）</button>
@@ -169,7 +174,6 @@ function viewBank(){
   const due = dueReview();
   const dueHtml = due.length ? `<div class="duebox">待复习队列（${due.length}）：` + due.map(q => `<span class="chip sm" data-act="focusQ" data-arg="${q.id}">${esc(q.q.slice(0, 18))}</span>`).join("") + `</div>` : "";
   const favN = S.questions.filter(q => q.fav).length;
-  const list = S.questions.map(bankItemHtml).join("");
   return `<h1 class="h1">模拟面试题库</h1>
     <div class="stat">总题量 ${S.questions.length} | 掌握 ${S.questions.filter(q => q.status === "掌握").length} | 模糊 ${S.questions.filter(q => q.status === "模糊").length} | 不会 ${S.questions.filter(q => q.status === "不会").length} | 收藏 ${favN} | 待复习 ${due.length}</div>
 
@@ -177,13 +181,22 @@ function viewBank(){
     <div class="cardh">英语听力 · 随机抽题播报</div>
     <div class="row">
       <button class="btn" onclick="enListenPick()">随机抽题并语音播报</button>
-      <span class="muted">点击后会用英语朗读一道英文面试题；再点题目/答案查看文本对照。</span>
+      <span class="muted">点击后用英语朗读一道英文面试题，再点题目/答案查看对照。</span>
     </div>
     <div id="enListenBox">${enListenHtml()}</div>
   </section>
 
     ${filterBar}${dueHtml}
-    <div id="qlist">${list}</div>
+    <div id="qlist"></div>
+    <div id="bankfoot"></div>
+
+  <section class="card">
+    <div class="cardh">全真模拟面试 · 各分类题量配比 <span class="muted">（进入全真模拟时按此抽题，可随时改）</span></div>
+    <div class="ivcomp">
+      ${IV_COMP_CATS.map(c => `<label class="ivcomprow"><span>${catName(c)}</span><input class="setnum" type="number" min="0" max="20" data-ivc="${c}" value="${comp[c]}"/></label>`).join("")}
+    </div>
+    <div class="row"><button class="btn sm" data-act="saveIvComp">保存配比</button><button class="btn sm alt" data-act="ivReset">恢复默认</button></div>
+  </section>
 
   <section class="card">
     <div class="cardh">文献翻译（${S.translate.length} 题 · 英译汉，含参考译文）</div>
@@ -195,6 +208,11 @@ function viewBank(){
   </section>`;
 }
 
+/* ---- 题目来源标签（文件 · 章节）---- */
+function srcTag(q){
+  return q && q.src ? `<div class="ivsrc"><span class="lab">来源</span>${esc(q.src)}</div>` : "";
+}
+
 /* ---- 题库条目统一渲染（列表初始渲染与筛选重建共用） ---- */
 function bankItemHtml(q){
   const st = q.status || "未标记";
@@ -202,32 +220,65 @@ function bankItemHtml(q){
     <span class="mbtns">
       <button class="mini ${q.fav ? 'fav-on' : ''}" data-act="fav" data-arg="${q.id}" title="收藏/取消">${q.fav ? "★" : "☆"}</button>
       <button class="mini" data-act="spkQ" data-arg="${q.id}" title="朗读题目+关键词">朗读</button>
+      <button class="mini" data-act="copyQans" data-arg="${q.id}" title="复制题目+答案">复制答案</button>
       <button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button>
     </span></div>
     <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>
+    ${srcTag(q)}
     ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="key">${esc(q.key)}</span></div>` : ""}
     ${q.tip ? `<div class="qqtip"><b>加分：</b>${esc(q.tip)}</div>` : ""}
     ${q.pit ? `<div class="qqpit"><b>避坑：</b>${esc(q.pit)}</div>` : ""}
     ${q.extra ? `<div class="qqextra"><b>延伸：</b>${esc(q.extra)}</div>` : ""}
     <details class="dbans"><summary>查看完整答案</summary>
-      <div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${esc(q.ans || "")}</div>
+      <div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${mdHtml(q.ans || "")}</div>
     </details>
   </div>`;
 }
 
 /* ---- 题库筛选/搜索（统一状态机：分类/状态/关键词 一次性重建，chip 高亮） ---- */
-let bankFilterState = { cat:"", st:"全部" };
-function renderBankList(){
-  const inp = $("#qsearch");
-  const w = (inp ? inp.value : "").toLowerCase().trim();
+let bankFilterState = { cat:"", st:"全部", src:"" };
+const BANK_PAGE_SIZE = 30; // 每页题量，避免一次性渲染 1656 题卡顿
+let bankPage = 1;           // 已加载页数
+let bankListCache = [];     // 当前筛选结果缓存（供分页追加）
+function bankApplyFilters(){
   let list = S.questions.slice();
   if(bankFilterState.cat) list = list.filter(q => q.cat === bankFilterState.cat);
   if(bankFilterState.st === "收藏") list = list.filter(q => q.fav);
   else if(bankFilterState.st !== "全部") list = list.filter(q => (q.status || "未标记") === bankFilterState.st);
-  if(w) list = list.filter(q => (q.q + " " + (q.ans || "")).toLowerCase().includes(w));
+  if(bankFilterState.src) list = list.filter(q => (q.src || "").split(" · ")[0] === bankFilterState.src);
+  return list;
+}
+function bankItemsHtml(items){ return items.map(bankItemHtml).join(""); }
+function bindBankFoot(list, shown){
+  const foot = $("#bankfoot");
+  if(!foot) return;
+  foot.innerHTML = (shown < list.length)
+    ? `<div class="row"><button class="btn sm" data-act="bankFeed">载入更多（已显示 ${shown}/${list.length}）</button></div>`
+    : "";
+}
+function renderBankList(resetPage){
+  const inp = $("#qsearch");
+  const w = (inp ? inp.value : "").toLowerCase().trim();
+  let list = bankApplyFilters();
+  if(w) list = list.filter(q => (q.q + " " + (q.ans || "") + " " + (q.src || "")).toLowerCase().includes(w));
+  bankListCache = list;
+  if(resetPage) bankPage = 1;
   const box = $("#qlist");
   if(!box) return;
-  box.innerHTML = list.map(bankItemHtml).join("") || "<p class='muted'>无匹配题目</p>";
+  const shown = Math.min(bankPage * BANK_PAGE_SIZE, list.length);
+  box.innerHTML = bankItemsHtml(list.slice(0, shown)) || "<p class='muted'>无匹配题目</p>";
+  bindBankFoot(list, shown);
+  bindCommon();
+}
+function bankFeed(){
+  const box = $("#qlist"), foot = $("#bankfoot");
+  if(!box || !bankListCache.length) return;
+  const start = bankPage * BANK_PAGE_SIZE;
+  const chunk = bankListCache.slice(start, start + BANK_PAGE_SIZE);
+  if(!chunk.length) return;
+  bankPage++;
+  box.insertAdjacentHTML("beforeend", bankItemsHtml(chunk));
+  bindBankFoot(bankListCache, bankPage * BANK_PAGE_SIZE);
   bindCommon();
 }
 function filterBank(arg){
@@ -239,18 +290,22 @@ function filterBank(arg){
     const active = (bk === "cat" && bankFilterState.cat === bv) || (bk === "st" && bankFilterState.st === bv);
     b.classList.toggle("on", active);
   });
-  renderBankList();
+  renderBankList(true);
 }
 function bankFilter(v){
-  renderBankList();
+  renderBankList(true);
+}
+function bankSrc(v){
+  bankFilterState.src = v;
+  renderBankList(true);
 }
 
 /* ---- 批量导入题目（粘贴文档/文本自动切分） ---- */
 function showImport(){
-  const cats = ["基础","专业海科","专业海生","专业环市","科研深挖","英文","翻译"];
+  const cats = ["基础","数据结构","计算机组成原理","操作系统","计算机网络","科研深挖","英文","翻译"];
   const panel = `<section class="card" id="importPanel"><div class="cardh">+ 批量导入题目（支持从论文/课件/笔记粘贴文本）</div>
     <div class="row">归类到：<select id="impCat">${cats.map(c => `<option value="${c}">${catName(c)}</option>`).join("")}</select> | <span class="muted">每行一道题，或用空行分隔</span></div>
-    <textarea id="impText" class="ed" placeholder="例：&#10;好氧反硝化与厌氧反硝化的区别？&#10;温度如何影响 nirS 基因丰度？&#10;为什么近岸水体富氧环境仍可发生反硝化？"></textarea>
+    <textarea id="impText" class="ed" placeholder="例：&#10;B+树与哈希索引的区别？&#10;TCP 拥塞控制有哪些阶段？&#10;进程与线程的本质区别是什么？"></textarea>
     <div class="row"><button class="btn" data-act="doImport">解析并入库</button><button class="btn sm" data-act="cancelImport">取消</button></div>
     <div id="impOut" class="muted"></div></section>`;
   const root = $("#app");
@@ -316,7 +371,7 @@ function viewIntro(){
       <button class="btn sm" data-act="voiceClear">清空</button>
     </div>
     <div id="voiceStatus" class="voicestatus muted">未启动</div>
-    <p class="muted">提示：点「开始语音输入」→ 允许麦克风 → 对着麦克风背诵 → 实时转写。背完点「停止」再对照文稿纠错。<b>重要：Chrome 的语音识别走 Google 云服务，国内网络通常连不上会报"网络错误"；请改用 <u>Edge 浏览器</u>（走微软服务，国内可用）打开本页重试</b>。若仍不行，可直接把口述文字粘贴到下方文本框。</p>
+    <p class="muted">点「开始语音输入」→ 允许麦克风 → 背诵 → 实时转写；背完点「停止」对照文稿纠错。<b>提示：Chrome 语音识别走 Google 云服务，国内常报"网络错误"；请用 <u>Edge 浏览器</u>（走微软服务）重试</b>。若仍不行，直接把口述文字粘贴到下方文本框。</p>
     <textarea class="ed tall" id="introVoice" placeholder="对着麦克风背诵，语音会自动转写到这里；背完后对照上方文稿逐句纠错..."></textarea>
   </section>
 
@@ -328,7 +383,7 @@ function viewIntro(){
 function introCoach(type){
   if(type === "cn") return "【中文自我介绍背诵检查】\n请现在口述你的1–2分钟中文自我介绍（参照模块B文稿）。\n口述完成后，请告诉我：① 是否卡顿/超时；② 哪一句最不流畅；③ 是否有冗余废话。\n我会针对流畅度、逻辑、时间把控、语言冗余进行点评并修正措辞。\n（也可直接把你的口述文字粘贴给我，我来批改。）";
   if(type === "en") return "【English Self-Intro Check】\nPlease recite your 1–2 min English intro now.\nAfter that, tell me: ① any hesitation/over-time; ② the weakest sentence; ③ filler words used.\nI'll give feedback on fluency, logic, timing, and wordiness, and polish your phrasing.";
-  if(type === "ppt") return "【PPT 完整版模拟汇报 · 评委模式】\n你将进行5–8分钟完整讲述（科学问题→方法→结果→意义→未来设想）。\n我（评委）会在中途随机打断提问，例如：\n· '你这个最适温度区间，重复几次？误差多大？'\n· 'nosZ缺失会不会导致N2O逃逸？你测了吗？'\n· '这项研究对同济市政工程有什么用？'\n· '如果让你把菌做成填料，中试怎么设计？'\n讲述结束后我会给你综合评分与改进建议。\n（在对话中直接开始讲述，我会适时打断。）";
+  if(type === "ppt") return "【PPT 完整版模拟汇报 · 评委模式】\n你将进行5–8分钟完整讲述（科学问题→方法→结果→意义→未来设想）。\n我（评委）会在中途随机打断提问，例如：\n· '你的 baseline 公平吗？消融实验做了吗？'\n· '这个方法的时间/空间复杂度是多少？'\n· '如何证明你的结果不是调参运气？'\n· '这个系统在生产环境能落地吗？'\n讲述结束后我会给你综合评分与改进建议。\n（在对话中直接开始讲述，我会适时打断。）";
   return "请口述后进行点评。";
 }
 function pptSim(){ return introCoach("ppt"); }
@@ -400,8 +455,11 @@ function weeklyReportData(){
   const rate = total ? Math.round(mastered / total * 100) : 0;
   const byCat = {}; weak.forEach(q => byCat[q.cat] = (byCat[q.cat] || 0) + 1);
   const plan = [];
-  if(byCat["专业环市"]) plan.push("补强环境/市政/氮循环概念（好氧反硝化、anammox、人工湿地脱氮）");
-  if(byCat["科研深挖"]) plan.push("重练三项研究的'故事线'与被追问救场数据");
+  if(byCat["计算机网络"]) plan.push("补强计算机网络概念（TCP/UDP、三次握手、拥塞控制、DNS）");
+  if(byCat["数据结构"]) plan.push("重练算法题与复杂度分析（排序/哈希/树/图/DP）");
+  if(byCat["计算机组成原理"]) plan.push("巩固组成原理（数据表示/存储层次/Cache/指令系统/中断流水线）");
+  if(byCat["操作系统"]) plan.push("巩固操作系统核心（进程线程、同步、虚拟内存、调度）");
+  if(byCat["科研深挖"]) plan.push("重练科研项目的'故事线'与被追问救场数据（baseline/消融/异常处理）");
   if(byCat["英文"]) plan.push("每天跟读1段英文自我介绍+1篇摘要朗读");
   if(byCat["翻译"]) plan.push("每日精译1句顶刊原文，积累术语");
   if(!plan.length) plan.push("保持节奏，增加广度刷题与英文流利度训练");
@@ -442,7 +500,7 @@ function weeklyReport(){
    ============================================================ */
 function viewVocab(){
   const v = S.vocab;
-  const dueV = v.filter(x => x.nextReview && x.nextReview <= todayStr() && x.status !== "掌握");
+  const dueV = v.filter(x => x.nextReview && x.nextReview <= todayStr());
   const rows = v.map((x,i) => `<tr class="${x.status === '不会' ? 'hi' : ''}">
     <td><b>${esc(x.term)}</b></td><td>${esc(x.en)}</td><td>${esc(x.def)}</td>
     <td class="ex">${esc(x.ex || "")}</td><td>${esc(x.syn || "—")}</td>
@@ -486,7 +544,7 @@ function viewVocab(){
   </section>
 
   <section class="card">
-    <div class="cardh">专业词汇库（海洋微生物 / 氮循环 / 滨海湿地 / eDNA / 市政水处理）</div>
+    <div class="cardh">专业词汇库（数据结构 / 计算机组成原理 / 操作系统 / 计算机网络 / 数据库 / AI）</div>
     <div class="scroll"><table class="tbl"><thead><tr><th>术语</th><th>英文</th><th>释义</th><th>论文应用例句</th><th>同义</th><th>状态</th><th>标记</th></tr></thead><tbody>${rows}</tbody></table></div>
   </section>
 
@@ -516,7 +574,7 @@ function viewVocab(){
   </section>
 
   <section class="card">
-    <div class="cardh">每日顶刊推荐（Water Research / ES&T / ISME / MEPS 等）</div>
+    <div class="cardh">每日顶刊推荐（NeurIPS / CVPR / SIGMOD / OSDI / SOSP 等）</div>
     <ul class="paperlist">${S.papers.map(p => `<li>${esc(p)}</li>`).join("")}</ul>
     <button class="btn sm" data-act="addPaper">+ 添加文献</button>
   </section>`;
@@ -527,12 +585,13 @@ function viewVocab(){
    ============================================================ */
 function viewFocus(){
   const due = S.questions.filter(q => q.status === "不会");
+  const dueSched = dueReview(); // SM-2 到期待复习（含已掌握但到期的强化项）
   const dbNo = [];
   S.docbank.sources.forEach(s => s.sections.forEach(sec => sec.items.forEach(it => { if(it.status === "不会") dbNo.push({src:s.title, it}); })));
   const vocabNo = S.vocab.filter(x => x.status === "不会");
   const trNo = S.translate.filter(x => x.status === "不会");
   const wbNo = (S.wordBank || []).filter(w => w.status === "不会");
-  if(!due.length && !dbNo.length && !vocabNo.length && !trNo.length && !wbNo.length){
+  if(!due.length && !dueSched.length && !dbNo.length && !vocabNo.length && !trNo.length && !wbNo.length){
     return `<h1 class="h1">重点复习板块</h1>
     <div class="card"><div class="cardh">暂无【不会】题目</div>
     <p class="muted">在整个工作台任意位置（面试题库A / 真题分区 / 词汇闪卡 / 文献翻译）把题目标记【不会】，都会自动归入本板块。</p>
@@ -540,20 +599,38 @@ function viewFocus(){
     <button class="btn" data-tab="docbank">前往真题分区 →</button>
     <button class="btn" data-tab="vocab">前往词汇文献 →</button></div>`;
   }
+  let dueHtml = "";
+  if(dueSched.length){
+    const dg = {};
+    dueSched.forEach(x => (dg[x.cat] = dg[x.cat] || []).push(x));
+    dueHtml = `<section class="card"><div class="cardh">SM-2 到期待复习（${dueSched.length}）<span class="muted">— 掌握/模糊/不会 均按记忆曲线自动排期，标记后进入下一间隔</span></div>`
+      + Object.keys(dg).map(cat => {
+        return `<div class="ivcat">${catName(cat)}（${dg[cat].length}）</div><ul class="ivlist">` + dg[cat].map(q => {
+          const st = q.status || "未标记";
+          return `<li class="qitem"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
+            <span class="mbtns"><button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button></span></div>
+            <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>${srcTag(q)}
+            <details class="dbans"><summary>参考答案<span class="muted">（下次复习 ${esc(q.nextReview || "—")}）</span></summary><div class="ansbox">${mdHtml(q.ans || "")}</div></details>
+          </li>`;
+        }).join("") + `</ul>`;
+      }).join("") + `</section>`;
+  }
   const groups = {};
   due.forEach(q => { (groups[q.cat] = groups[q.cat] || []).push(q); });
   let html = `<h1 class="h1">重点复习板块 · 全工作台"不会"自动归档</h1>
-  <div class="stat">题库A 不会 ${due.length} | 真题分区 不会 ${dbNo.length} | 专业词汇 不会 ${vocabNo.length} | 文献翻译 不会 ${trNo.length} | 单词不会 ${wbNo.length}。所有项目持久保留，仅手动点击「掌握/移出」才会移出。</div>`;
+  <div class="stat">题库A 不会 ${due.length} | SM-2 到期待复习 ${dueSched.length} | 真题分区 不会 ${dbNo.length} | 专业词汇 不会 ${vocabNo.length} | 文献翻译 不会 ${trNo.length} | 单词不会 ${wbNo.length}。</div>`
+    + dueHtml;
   Object.keys(groups).forEach(cat => {
     html += `<section class="card"><div class="cardh">${catName(cat)}（${groups[cat].length}）</div>` + groups[cat].map(q => {
       const st = q.status || "未标记";
       return `<div class="qitem"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
-        <span class="mbtns"><button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button></span></div>
+        <span class="mbtns"><button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button><button class="mini" data-act="copyQans" data-arg="${q.id}">复制答案</button></span></div>
         <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>
+        ${srcTag(q)}
         ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="key">${esc(q.key)}</span></div>` : ""}
         ${q.tip ? `<div class="qqtip"><b>加分：</b>${esc(q.tip)}</div>` : ""}
         ${q.pit ? `<div class="qqpit"><b>避坑：</b>${esc(q.pit)}</div>` : ""}
-        <details class="dbans"><summary>查看完整答案</summary><div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${esc(q.ans || "")}</div></details>
+        <details class="dbans"><summary>查看完整答案</summary><div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${mdHtml(q.ans || "")}</div></details>
       </div>`;
     }).join("") + `</section>`;
   });
@@ -565,7 +642,7 @@ function viewFocus(){
         return `<li class="qitem"><div class="qtop"><span class="cat">真题分区</span><span class="st st-不会">不会</span>
           <span class="mbtns"><button class="mini" data-act="dbmk" data-arg="${it.id}|掌握">掌握</button><button class="mini warn" data-act="dbmk" data-arg="${it.id}|模糊">模糊</button></span></div>
           <div class="qq">${esc(it.q)}</div>
-          <details class="dbans"><summary>查看答案</summary><div class="ansbox">${esc(it.ans || "")}</div></details></li>`;
+          <details class="dbans"><summary>查看答案</summary><div class="ansbox">${mdHtml(it.ans || "")}</div></details></li>`;
       }).join("") + `</ul>`;
     });
     html += `</section>`;
@@ -607,7 +684,7 @@ function viewFocus(){
 }
 
 /* ============================================================
-   真题分区：文档总库（来自用户上传的 6 份文档）
+   真题分区：文档总库（来自用户上传的多份文档）
    ============================================================ */
 function dbUpdate(id, field, val){
   for(const s of S.docbank.sources){
@@ -660,7 +737,7 @@ function viewDocBank(){
             </span></div>
           <div class="qq"><span class="editable" contenteditable="true" data-did="${it.id}" data-field="q">${esc(it.q)}</span></div>
           <details class="dbans"><summary>查看 / 编辑答案</summary>
-            <div class="editable ansbox" contenteditable="true" data-did="${it.id}" data-field="ans">${esc(it.ans || "")}</div>
+            <div class="editable ansbox" contenteditable="true" data-did="${it.id}" data-field="ans">${mdHtml(it.ans || "")}</div>
           </details>
         </div>`;
       }).join("");
@@ -674,13 +751,13 @@ function viewDocBank(){
   if(cur === "all"){ body = srcs.map(renderSource).join(""); }
   else { const s = srcs.find(x => x.id === cur); body = s ? renderSource(s) : "<p class='muted'>未找到该文档</p>"; }
   return `<h1 class="h1">真题分区 · 文档总库</h1>
-  <div class="stat">共收录 ${total} 条（来自你上传的 6 份文档）。所有题目与答案均可直接点击编辑、自行添加录入；可标记掌握/模糊/不会，标「不会」自动进重点复习。</div>
+  <div class="stat">共收录 ${total} 条（来自 ${srcs.length} 份文档）。所有题目与答案均可直接点击编辑、自行添加录入；可标记掌握/模糊/不会，标「不会」自动进重点复习。</div>
 
   <section class="card">
     <div class="cardh">英语听力 · 随机抽题播报</div>
     <div class="row">
       <button class="btn" onclick="enListenPick()">随机抽题并语音播报</button>
-      <span class="muted">用英语朗读一道英文面试题；再点题目/答案查看文本对照。</span>
+      <span class="muted">用英语朗读一道英文面试题，再点题目/答案查看对照。</span>
     </div>
     <div id="enListenBox">${enListenHtml()}</div>
   </section>
