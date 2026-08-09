@@ -20,7 +20,7 @@ function voiceStart(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
     voiceStatus("❌ 当前浏览器不支持语音识别，请用 Chrome / Edge 桌面版（并用 localhost 打开）", "bad");
-    alert("当前浏览器不支持语音识别（Web Speech API）。\n请用 Chrome 或 Edge 桌面版打开本页（需通过 http://127.0.0.1:8000 访问，不能直接双击文件打开）。");
+    confirmModal("当前浏览器不支持语音识别（Web Speech API）。请用 Chrome 或 Edge 桌面版打开本页（需通过 http://127.0.0.1:8000 访问，不能直接双击文件打开）。", { title: "语音识别不可用" });
     return;
   }
   if(recog){ voiceStatus("正在聆听…", "on"); return; }
@@ -58,7 +58,7 @@ function voiceStart(){
     voiceStatus("正在请求麦克风权限…（若弹出提示请点「允许」）", "on");
   }catch(e){
     recog = null;     voiceStatus("启动失败：" + e.message, "bad");
-    alert("启动失败：" + e.message + "\n可能是已在运行中，先点「停止」再试。");
+    confirmModal("启动失败：" + e.message + "\n可能是已在运行中，先点「停止」再试。", { title: "语音输入失败" });
   }
 }
 function voiceStop(){ if(recog){ try{ recog.stop(); }catch(e){} recog = null; voiceStatus("已停止", "muted"); flash("已停止语音输入"); } else { voiceStatus("语音识别未在运行", "muted"); } }

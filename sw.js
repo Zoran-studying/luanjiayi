@@ -1,4 +1,4 @@
-const CACHE = "pushmian-buddy-v10";
+const CACHE = "pushmian-buddy-v13";
 const ASSETS = [
   "./",
   "./index.html",
@@ -41,6 +41,7 @@ self.addEventListener("fetch", ev => {
   if(url.origin !== location.origin) return;
   ev.respondWith(
     fetch(ev.request).then(res => {
+      if(!res || !res.ok) return res;
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(ev.request, copy));
       return res;

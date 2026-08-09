@@ -20,13 +20,27 @@
    ============================================================ */
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
-const MDDIR = path.join(__dirname, "..", "..", "md文件");
+const MD_CANDIDATES = [
+  path.join(__dirname, "..", "md文件"),       // 推荐：仓库内，可随代码版本管理
+  path.join(__dirname, "..", "..", "md文件") // 兼容旧工作区布局
+];
+const MDDIR = MD_CANDIDATES.find(p => fs.existsSync(p)) || MD_CANDIDATES[0];
 const OUT   = path.join(__dirname, "..", "js", "data-qa.js");
+const CHECK_ONLY = process.argv.includes("--check");
+const MIN_EXPECTED = 1000;
 
 /* ---------- 归一化，用于去重 ---------- */
 function normQ(s){
   return String(s || "").toLowerCase().replace(/[\s\u3000，。？！、．:：；;,.!?（）()【】\[\]「」"'“”‘’《》<>-]/g, "").replace(/q\d+$/,"");
+}
+const existingIdByQ = new Map();
+if(fs.existsSync(OUT)){
+  try{
+    const old = require(OUT).SEED_QUESTIONS_QA || [];
+    old.forEach(q => { const k=normQ(q.q); if(k && q.id) existingIdByQ.set(k, q.id); });
+  }catch(e){ console.warn("警告：无法读取现有题库 id，将为全部题目重新生成稳定 id：" + e.message); }
 }
 
 /* ---------- 章节标题抽取 ---------- */
@@ -199,16 +213,23 @@ function add(item, fileShort, prefix){
   seenQ.add(key);
   item.cat = item.cat || CAT;          // 分类来自所属文件配置
   item.src = fileShort + (item.sec ? " · " + item.sec : "");
-  // 稳定 id：题干内容哈希（内容不变则 id 不变），避免顺序编号导致重生成后的 id 漂移错位
-  item.id = prefix + "-" + hash32(item.q).slice(0, 8);
+  // 优先复用现有同题干 id，确保老用户进度稳定；仅新题使用内容哈希 id。
+  item.id = existingIdByQ.get(key) || (prefix + "-" + hash32(item.q).slice(0, 8));
   all.push(item);
   return true;
 }
 let CAT = "";
 
+const missingFiles = SRC.filter(s => !fs.existsSync(path.join(MDDIR, s.file))).map(s => s.file);
+if(missingFiles.length){
+  console.error("题库生成已中止：缺少 " + missingFiles.length + " 个必需源文件（未修改 data-qa.js）");
+  missingFiles.forEach(f => console.error("  - " + f));
+  console.error("查找目录：" + MDDIR);
+  process.exit(1);
+}
+
 for(const s of SRC){
   const full = path.join(MDDIR, s.file);
-  if(!fs.existsSync(full)){ console.log("!! 缺少文件：", s.file); continue; }
   const t = fs.readFileSync(full, "utf8");
   const lines = t.split("\n");
   const items = s.mode === "bold" ? parseBoldQA(lines) : parseLines(lines);
@@ -248,6 +269,28 @@ linesOut.push("/* 分类统计 */");
 Object.keys(byCat).forEach(c => linesOut.push(`// ${c}: ${byCat[c]}`));
 linesOut.push("");
 linesOut.push(`if(typeof module !== "undefined") module.exports = { SEED_QUESTIONS_QA };`);
-fs.writeFileSync(OUT, linesOut.join("\n"), "utf8");
-console.log("\n已生成", OUT, "共", all.length, "题");
+const generated = linesOut.join("\n");
+if(all.length < MIN_EXPECTED) throw new Error("生成题量异常：" + all.length + " < " + MIN_EXPECTED + "，已拒绝覆盖");
+const ids = new Set();
+all.forEach(q => { if(ids.has(q.id)) throw new Error("生成结果存在重复 id：" + q.id); ids.add(q.id); });
+new vm.Script(generated, { filename:"data-qa.generated.js" });
+if(CHECK_ONLY){
+  const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf8").replace(/\r\n/g,"\n") : "";
+  if(current.trimEnd() !== generated.replace(/\r\n/g,"\n").trimEnd()){
+    const a=current.split("\n"), b=generated.replace(/\r\n/g,"\n").split("\n");
+    let first=0; while(first<Math.min(a.length,b.length) && a[first]===b[first]) first++;
+    console.error("题库生成检查失败：js/data-qa.js 与源 Markdown 不一致（未修改文件）");
+    console.error("首个差异位于第 " + (first+1) + " 行；当前/生成总行数 " + a.length + "/" + b.length);
+    console.error("当前：" + (a[first] || "").slice(0,300));
+    console.error("生成：" + (b[first] || "").slice(0,300));
+    process.exit(1);
+  }
+  console.log("\n题库生成检查通过：", all.length, "题，现有 data-qa.js 与源文件一致");
+}else{
+  const tmp = OUT + ".tmp-" + process.pid;
+  fs.writeFileSync(tmp, generated, "utf8");
+  try{ fs.renameSync(tmp, OUT); }
+  catch(e){ try{ if(fs.existsSync(tmp)) fs.unlinkSync(tmp); }catch(_){} throw e; }
+  console.log("\n已原子更新", OUT, "共", all.length, "题");
+}
 console.log("按分类:", JSON.stringify(byCat));

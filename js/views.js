@@ -28,9 +28,10 @@ function dueBadge(dl){
    首次使用表单
    ============================================================ */
 function viewSetup(){
+  const editing = S.profile.locked === true;
   return `
-  <h1 class="h1">欢迎使用推免工作台</h1>
-  <p class="muted" style="margin-bottom:16px">首次使用请填写基本信息，这些信息会显示在首页和导出报告中。填写后可随时在「学习台账」中修改。</p>
+  <h1 class="h1">${editing ? "编辑个人资料" : "欢迎使用推免工作台"}</h1>
+  <p class="muted" style="margin-bottom:16px">${editing ? "修改后的资料会同步显示在首页，并保存在当前浏览器。" : "首次使用请填写基本信息，这些信息会显示在首页和导出报告中。填写后可随时在「学习台账」中修改。"}</p>
   <section class="card">
     <div class="cardh">填写个人信息</div>
     <div class="setupform">
@@ -39,10 +40,11 @@ function viewSetup(){
       <label class="setuplabel">专业 <input class="setupinput" id="setupMajor" value="${esc(S.profile.major)}" placeholder="例：计算机科学与技术（本科）"/></label>
       <label class="setuplabel">GPA <input class="setupinput" id="setupGpa" value="${esc(S.profile.gpa)}" placeholder="例：4.07 / 5.0"/></label>
       <label class="setuplabel">排名 <input class="setupinput" id="setupRank" value="${esc(S.profile.rank)}" placeholder="例：专业第二（绩点/综测）"/></label>
+      <label class="setuplabel">目标方向 <input class="setupinput" id="setupTarget" value="${esc(S.profile.target)}" placeholder="例：计算机视觉 / 人工智能"/></label>
     </div>
     <div class="row" style="margin-top:16px">
-      <button class="btn" data-act="saveSetup">保存并进入</button>
-      <button class="btn sm alt" data-act="skipSetup">跳过，稍后填写</button>
+      <button class="btn" data-act="saveSetup">${editing ? "保存修改" : "保存并进入"}</button>
+      ${editing ? '<button class="btn sm alt" data-act="cancelSetup">取消</button>' : '<button class="btn sm alt" data-act="skipSetup">跳过，稍后填写</button>'}
     </div>
   </section>`;
 }
@@ -86,14 +88,14 @@ function viewHome(){
   const ivHtml = Object.keys(ivGroups).map(cat => {
     const items = ivGroups[cat].map(q => `<li><b>${esc(q.q)}</b>
       ${srcTag(q)}
-      <details class="dbans"><summary><span class="lab">参考答案</span><span class="muted">${(q.ans || "").length > 160 ? "（长答案，点击展开）" : ""}</span></summary><div class="ivans"><span class="editable" contenteditable="true" data-eid="${q.id}">${mdHtml(q.ans || "")}</span></div></details>
+      <details class="dbans"><summary><span class="lab">参考答案</span><span class="muted">${(q.ans || "").length > 160 ? "（长答案，点击展开）" : ""}</span></summary><div class="ivans"><span class="editable" contenteditable="true" data-eid="${attr(q.id)}">${mdHtml(q.ans || "")}</span></div></details>
       ${q.tip ? `<div class="ivans tip"><span class="lab">加分</span>${esc(q.tip)}</div>` : ""}
       ${q.pit ? `<div class="ivans pit"><span class="lab">避坑</span>${esc(q.pit)}</div>` : ""}
       ${q.extra ? `<div class="ivans extra"><span class="lab">思考</span>${esc(q.extra)}</div>` : ""}
       <span class="mbtns">
-        <button class="mini" data-act="mk" data-arg="${q.id}|掌握">已掌握</button>
-        <button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button>
-        <button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button>
+        <button class="mini" data-act="mk" data-arg="${attr(q.id)}|掌握">已掌握</button>
+        <button class="mini warn" data-act="mk" data-arg="${attr(q.id)}|模糊">模糊</button>
+        <button class="mini bad" data-act="mk" data-arg="${attr(q.id)}|不会">不会</button>
       </span></li>`).join("");
     return `<div class="ivcat">${catName(cat)}（${ivGroups[cat].length}）</div><ul class="ivlist">${items}</ul>`;
   }).join("");
@@ -135,13 +137,13 @@ function viewHome(){
     <div class="three">
       <div class="col"><div class="colh new">新学内容</div><ul>${newItems}<li>新词汇：<b>${esc(d.plan.newVocab || "")}</b></li><li>文献：<b>${esc(d.plan.paper || "")}</b></li></ul></div>
       <div class="col"><div class="colh rev">复习内容（SM-2 到期待复习）</div><ul>${reviewItems}</ul></div>
-      <div class="col"><div class="colh con">巩固内容（已掌握随机3道）</div><ul>${consItems}</ul></div>
+      <div class="col"><div class="colh con">巩固内容（已掌握${S.settings.intensity === "low" ? "随机1道" : "随机3道"}）</div><ul>${consItems}</ul></div>
     </div>
   </section>
 
   ${siBox}
 
-  <section class="card">
+  <section class="card" id="todayIvSec">
     <div class="cardh">今日模拟面试习题（中文 ${iv.filter(q => ["基础","数据结构","计算机组成原理","操作系统","计算机网络","深度学习","AI智能体","项目经历","生物信息","科研深挖"].includes(q.cat)).length} + 英文 ${iv.filter(q => q.cat === "英文").length} + 翻译 ${iv.filter(q => q.cat === "翻译").length}）</div>
     ${ivHtml}
     <div class="row">
@@ -149,7 +151,7 @@ function viewHome(){
       <button class="btn alt" data-act="fullInterview">进入全真面试模式（科研深挖追问）</button>
       <button class="btn sm" data-act="saveLog">保存今日学习日志</button>
     </div>
-    <div class="lognote">今日日志备注：<textarea id="lognote" placeholder="记录薄弱知识点、掌握情况...">${esc(d.note || "")}</textarea></div>
+    <div class="lognote"><label for="lognote">今日日志备注 <span class="autosavehint">输入后自动保存</span></label><textarea id="lognote" placeholder="记录薄弱知识点、掌握情况...">${esc(d.note || "")}</textarea></div>
   </section>`;
 }
 
@@ -173,7 +175,7 @@ function viewBank(){
     <button class="btn sm" data-act="showImport">+ 批量导入题目</button>
   </div>`;
   const due = dueReview();
-  const dueHtml = due.length ? `<div class="duebox">待复习队列（${due.length}）：` + due.map(q => `<span class="chip sm" data-act="focusQ" data-arg="${q.id}">${esc(q.q.slice(0, 18))}</span>`).join("") + `</div>` : "";
+  const dueHtml = due.length ? `<div class="duebox">待复习队列（${due.length}）：` + due.map(q => `<span class="chip sm" data-act="focusQ" data-arg="${attr(q.id)}">${esc(q.q.slice(0, 18))}</span>`).join("") + `</div>` : "";
   const favN = S.questions.filter(q => q.fav).length;
   return `<h1 class="h1">模拟面试题库</h1>
     <div class="stat">总题量 ${S.questions.length} | 掌握 ${S.questions.filter(q => q.status === "掌握").length} | 模糊 ${S.questions.filter(q => q.status === "模糊").length} | 不会 ${S.questions.filter(q => q.status === "不会").length} | 收藏 ${favN} | 待复习 ${due.length}</div>
@@ -181,7 +183,7 @@ function viewBank(){
   <section class="card">
     <div class="cardh">英语听力 · 随机抽题播报</div>
     <div class="row">
-      <button class="btn" onclick="enListenPick()">随机抽题并语音播报</button>
+      <button class="btn" data-act="enListenPick">随机抽题并语音播报</button>
       <span class="muted">点击后用英语朗读一道英文面试题，再点题目/答案查看对照。</span>
     </div>
     <div id="enListenBox">${enListenHtml()}</div>
@@ -201,10 +203,10 @@ function viewBank(){
 
   <section class="card">
     <div class="cardh">文献翻译（${S.translate.length} 题 · 英译汉，含参考译文）</div>
-    <p class="muted">以下为全部文献翻译练习题目，点击英文句子中任意单词可查中文释义、词形与朗读发音；点击题目展开参考译文。可标记掌握/不会（标"不会"自动进重点复习）。</p>
+    <p class="muted">以下为全部文献翻译练习题目，点击英文单词会把该单词发送到第三方词典/翻译服务查询；请勿在上下文中放入敏感信息。点击题目可展开参考译文并标记进度。</p>
     <div class="scroll">${S.translate.map(t => `<details class="dbans"><summary class="enq">${wrapWords(esc(t.en))}</summary>
-      <div class="ansbox"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${t.id}" data-field="cn">${esc(t.cn || "")}</span></div>
-      <div class="row"><button class="mini" data-act="trmk" data-arg="${t.id}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${t.id}|模糊">模糊</button><button class="mini bad" data-act="trmk" data-arg="${t.id}|不会">不会</button></div>
+      <div class="ansbox"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${attr(t.id)}" data-field="cn">${esc(t.cn || "")}</span></div>
+      <div class="row"><button class="mini" data-act="trmk" data-arg="${attr(t.id)}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${attr(t.id)}|模糊">模糊</button><button class="mini bad" data-act="trmk" data-arg="${attr(t.id)}|不会">不会</button></div>
     </details>`).join("")}</div>
   </section>`;
 }
@@ -216,22 +218,22 @@ function srcTag(q){
 
 /* ---- 题库条目统一渲染（列表初始渲染与筛选重建共用） ---- */
 function bankItemHtml(q){
-  const st = q.status || "未标记";
-  return `<div class="qitem" data-id="${q.id}"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
+  const st = safeStatus(q.status);
+  return `<div class="qitem" data-id="${attr(q.id)}"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
     <span class="mbtns">
-      <button class="mini ${q.fav ? 'fav-on' : ''}" data-act="fav" data-arg="${q.id}" title="收藏/取消">${q.fav ? "★" : "☆"}</button>
-      <button class="mini" data-act="spkQ" data-arg="${q.id}" title="朗读题目+关键词">朗读</button>
-      <button class="mini" data-act="copyQans" data-arg="${q.id}" title="复制题目+答案">复制答案</button>
-      <button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button>
+      <button class="mini ${q.fav ? 'fav-on' : ''}" data-act="fav" data-arg="${attr(q.id)}" title="收藏/取消">${q.fav ? "★" : "☆"}</button>
+      <button class="mini" data-act="spkQ" data-arg="${attr(q.id)}" title="朗读题目+关键词">朗读</button>
+      <button class="mini" data-act="copyQans" data-arg="${attr(q.id)}" title="复制题目+答案">复制答案</button>
+      <button class="mini" data-act="mk" data-arg="${attr(q.id)}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${attr(q.id)}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${attr(q.id)}|不会">不会</button>
     </span></div>
-    <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>
+    <div class="qq"><span class="editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="q">${esc(q.q)}</span></div>
     ${srcTag(q)}
-    ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="key">${esc(q.key)}</span></div>` : ""}
+    ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="key">${esc(q.key)}</span></div>` : ""}
     ${q.tip ? `<div class="qqtip"><b>加分：</b>${esc(q.tip)}</div>` : ""}
     ${q.pit ? `<div class="qqpit"><b>避坑：</b>${esc(q.pit)}</div>` : ""}
     ${q.extra ? `<div class="qqextra"><b>延伸：</b>${esc(q.extra)}</div>` : ""}
     <details class="dbans"><summary>查看完整答案</summary>
-      <div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${mdHtml(q.ans || "")}</div>
+      <div class="ansbox editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="ans">${mdHtml(q.ans || "")}</div>
     </details>
   </div>`;
 }
@@ -286,7 +288,7 @@ function bankFeed(){
 function filterBank(arg){
   const [k,v] = arg.split(":");
   if(k === "cat") bankFilterState.cat = (bankFilterState.cat === v) ? "" : v;
-  else if(k === "st") bankFilterState.st = v;
+  else if(k === "st") bankFilterState.st = (bankFilterState.st === v) ? "全部" : v;
   document.querySelectorAll("[data-act='bf']").forEach(b => {
     const [bk,bv] = b.dataset.arg.split(":");
     const active = (bk === "cat" && bankFilterState.cat === bv) || (bk === "st" && bankFilterState.st === bv);
@@ -311,12 +313,14 @@ function showImport(){
     <div class="row"><button class="btn" data-act="doImport">解析并入库</button><button class="btn sm" data-act="cancelImport">取消</button></div>
     <div id="impOut" class="muted"></div></section>`;
   const root = $("#app");
-  root.innerHTML = navBar() + `<main class="main"><h1 class="h1">模拟面试题库</h1>${panel}</main>`;
+  updateBottomNav("bank");
+  document.title = "批量导入题目 · PushMian Buddy";
+  root.innerHTML = navBar("bank") + `<main class="main" id="mainContent" tabindex="-1"><h1 class="h1">模拟面试题库</h1>${panel}</main>`;
   bindCommon();
 }
 function doImport(){
   const ta = $("#impText");
-  if(!ta || !ta.value.trim()){ alert("请先粘贴题目文本"); return; }
+  if(!ta || !ta.value.trim()){ flash("请先粘贴题目文本", "warn"); return; }
   const cat = $("#impCat").value;
   const lines = ta.value.split(/\n+/).map(s => s.trim()).filter(Boolean);
   const cand = [];
@@ -325,7 +329,7 @@ function doImport(){
     if(clean.length < 4) return;
     cand.push({ id: uid(), cat, q: clean, ans: "（待补充：点击参考答案处直接编辑）", tip:"", pit:"", extra:"", key:"", status:"未标记", nextReview:"", reviewStage:0, fav:false });
   });
-  if(!cand.length){ alert("未解析到有效题目（每行至少4字）"); return; }
+  if(!cand.length){ flash("未解析到有效题目（每行至少4字）", "warn"); return; }
   S.questions.push(...cand);
   save();
   const out = $("#impOut");
@@ -351,10 +355,10 @@ function viewIntro(){
         <button class="btn sm" data-act="saveIntro" data-arg="${key}">保存</button>
         <button class="btn sm alt" data-act="checkIntro" data-arg="${key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'}">${key === 'ppt_full' ? "模拟PPT汇报" : "发起背诵检查"}</button>
       </div>
-      <label class="chk ${s[key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'] ? 'done' : ''}" data-act="siToggle" data-arg="${key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'}">${s[key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'] ? '今日已打卡' : '今日未打卡'}</label>
+      <button class="chk checkbtn ${s[key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'] ? 'done' : ''}" data-act="siToggle" data-arg="${key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'}" aria-pressed="${s[key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'] ? 'true' : 'false'}">${s[key === 'cn_short' ? 'cn' : key === 'en_short' ? 'en' : 'ppt'] ? '今日已打卡' : '今日未打卡'}</button>
     </section>`;
   return `<h1 class="h1">自我介绍专项训练</h1>
-  <div class="stat">三套文稿已永久存储，跨会话持续生效。下方「秒表 + 语音输入」：边背边计时，背完看语音转文字逐句纠错。</div>
+  <div class="stat">三套文稿输入后自动保存，跨会话持续生效。下方「秒表 + 语音输入」：边背边计时，背完看语音转文字逐句纠错。</div>
 
   <section class="card">
     <div class="cardh">背诵秒表 + 语音输入纠错</div>
@@ -421,6 +425,16 @@ function viewLedger(){
   const stk = streakDays();
   return `<h1 class="h1">学习计划与台账</h1>
   <section class="card">
+    <div class="cardh">个人资料</div>
+    <div class="profilegrid">
+      <div><span>姓名</span><b>${esc(S.profile.name || "未填写")}</b></div>
+      <div><span>学校</span><b>${esc(S.profile.school || "未填写")}</b></div>
+      <div><span>专业</span><b>${esc(S.profile.major || "未填写")}</b></div>
+      <div><span>目标方向</span><b>${esc(S.profile.target || "未填写")}</b></div>
+    </div>
+    <button class="btn sm" data-act="editProfile">编辑个人资料</button>
+  </section>
+  <section class="card">
     <div class="cardh">本周日历视图 <span class="muted">（题=当日面试题量，自=自我介绍打卡；连续打卡 ${stk} 天）</span></div>
     <table class="cal"><tr>${cells}</tr></table>
   </section>
@@ -467,9 +481,13 @@ function weeklyReportData(){
   if(!plan.length) plan.push("保持节奏，增加广度刷题与英文流利度训练");
   return { weak, mastered, total, rate, byCat, plan };
 }
+function recentWeekLogs(){
+  const days = []; for(let i=0;i<7;i++) days.push(addDays(todayStr(), -i));
+  return days.map(d => S.logs[d]).filter(Boolean);
+}
 function weeklyReportText(){
   const { weak, mastered, total, rate, byCat, plan } = weeklyReportData();
-  const siDays = Object.values(S.logs).filter(l => l.selfIntro && (l.selfIntro.cn || l.selfIntro.en || l.selfIntro.ppt)).length;
+  const siDays = recentWeekLogs().filter(l => l.selfIntro && (l.selfIntro.cn || l.selfIntro.en || l.selfIntro.ppt)).length;
   const lines = [];
   lines.push("【推免助手 · 本周复盘报告】");
   lines.push("周期：" + addDays(todayStr(), -6) + " ~ " + todayStr());
@@ -485,7 +503,7 @@ function weeklyReportText(){
 }
 function weeklyReport(){
   const { weak, mastered, total, rate, byCat, plan } = weeklyReportData();
-  const siDays = Object.values(S.logs).filter(l => l.selfIntro && (l.selfIntro.cn || l.selfIntro.en || l.selfIntro.ppt)).length;
+  const siDays = recentWeekLogs().filter(l => l.selfIntro && (l.selfIntro.cn || l.selfIntro.en || l.selfIntro.ppt)).length;
   const out = $("#weeklyOut");
   if(!out) return;
   out.innerHTML = `<div class="docout">
@@ -503,13 +521,13 @@ function weeklyReport(){
 function viewVocab(){
   const v = S.vocab;
   const dueV = v.filter(x => x.nextReview && x.nextReview <= todayStr());
-  const rows = v.map((x,i) => `<tr class="${x.status === '不会' ? 'hi' : ''}">
+  const rows = v.map((x,i) => { const vst=safeStatus(x.status); return `<tr class="${vst === '不会' ? 'hi' : ''}">
     <td><b>${esc(x.term)}</b></td><td>${esc(x.en)}</td><td>${esc(x.def)}</td>
     <td class="ex">${esc(x.ex || "")}</td><td>${esc(x.syn || "—")}</td>
-    <td><span class="st st-${(x.status || '未标记')}">${x.status || '未标记'}</span></td>
+    <td><span class="st st-${vst}">${vst}</span></td>
     <td><button class="mini" data-act="mv" data-arg="${i}|掌握">掌握</button>
         <button class="mini warn" data-act="mv" data-arg="${i}|模糊">模糊</button>
-        <button class="mini bad" data-act="mv" data-arg="${i}|不会">不会</button></td></tr>`).join("");
+        <button class="mini bad" data-act="mv" data-arg="${i}|不会">不会</button></td></tr>`; }).join("");
   return `<h1 class="h1">专业词汇库 & 文献工具</h1>
   <div class="stat">词汇 ${v.length} | 待复习 ${dueV.length} | ${vocabFlash.weakOnly ? '当前闪卡：弱项模式（只背不会/模糊）' : '当前闪卡：全部词汇'}</div>
   ${dueV.length ? `<div class="duebox">今日待复习词汇（${dueV.length}）：${dueV.map(x => esc(x.term)).join("、")}</div>` : ""}
@@ -517,29 +535,29 @@ function viewVocab(){
   <section class="card">
     <div class="cardh">中英文对照背诵（闪卡）</div>
     <div class="row">模式：
-      <button class="chip ${vocabFlash.mode === 'en2cn' ? 'on' : ''}" onclick="vfMode('en2cn')">英→中</button>
-      <button class="chip ${vocabFlash.mode === 'cn2en' ? 'on' : ''}" onclick="vfMode('cn2en')">中→英</button>
-      <button class="chip ${vocabFlash.mode === 'mixed' ? 'on' : ''}" onclick="vfMode('mixed')">混合</button>
-      <button class="chip ${vocabFlash.weakOnly ? 'on' : ''}" onclick="vfWeak()">弱项模式</button>
-      <button class="btn sm" onclick="vfStart()">开始 / 重洗</button>
+      <button class="chip ${vocabFlash.mode === 'en2cn' ? 'on' : ''}" data-act="vfMode" data-arg="en2cn">英→中</button>
+      <button class="chip ${vocabFlash.mode === 'cn2en' ? 'on' : ''}" data-act="vfMode" data-arg="cn2en">中→英</button>
+      <button class="chip ${vocabFlash.mode === 'mixed' ? 'on' : ''}" data-act="vfMode" data-arg="mixed">混合</button>
+      <button class="chip ${vocabFlash.weakOnly ? 'on' : ''}" data-act="vfWeak">弱项模式</button>
+      <button class="btn sm" data-act="vfStart">开始 / 重洗</button>
     </div>
     <div class="vfcard" id="vfCard"><span class="muted">选好模式后点「开始 / 重洗」</span></div>
     <div class="row">
-      <button class="btn" onclick="vfReveal()">显示答案</button>
-      <button class="btn alt" onclick="vfNext()">下一张</button>
-      <button class="mini" onclick="vfMark('掌握')">掌握</button>
-      <button class="mini warn" onclick="vfMark('模糊')">模糊</button>
-      <button class="mini bad" onclick="vfMark('不会')">不会</button>
+      <button class="btn" data-act="vfReveal">显示答案</button>
+      <button class="btn alt" data-act="vfNext">下一张</button>
+      <button class="mini" data-act="vfMark" data-arg="掌握">掌握</button>
+      <button class="mini warn" data-act="vfMark" data-arg="模糊">模糊</button>
+      <button class="mini bad" data-act="vfMark" data-arg="不会">不会</button>
     </div>
     <div id="vfProg" class="muted"></div>
   </section>
 
   <section class="card">
     <div class="cardh">文献翻译练习（英译汉，含参考译文，可编辑）</div>
-    <p class="muted">题目来自你上传的文档 + 摘抄的学术句子（不含期刊名）。点「查看参考译文」对照，可标记掌握/不会。</p>
+    <p class="muted">题目来自你上传的文档 + 摘抄的学术句子。点击单词会把该单词发送到第三方词典/翻译服务查询；请勿在上下文中放入敏感信息。</p>
     <div class="row">
-      <button class="btn sm" onclick="trStart()">随机来一题 / 重洗</button>
-      <button class="btn sm alt" onclick="trNext()">下一题</button>
+      <button class="btn sm" data-act="trStart">随机来一题 / 重洗</button>
+      <button class="btn sm alt" data-act="trNext">下一题</button>
     </div>
     <div id="trPanel"><span class="muted">点「随机来一题」开始</span></div>
     <div id="trProg" class="muted"></div>
@@ -554,19 +572,19 @@ function viewVocab(){
     <div class="cardh">文献翻译总览（${S.translate.length} 题，点击展开查看参考译文）</div>
     <p class="muted">以下为全部文献翻译练习题目，含英译汉参考译文。点击题目展开答案对照；可标记掌握/不会（标"不会"自动进重点复习）。</p>
     <div class="trlist">${S.translate.map((t,i) => {
-      const st = t.status || "未标记";
+      const st = safeStatus(t.status);
       return `<div class="qitem trrow">
         <div class="qtop"><span class="cat">翻译 ${i + 1}</span><span class="st st-${st}">${st}</span>
-          <span class="mbtns"><button class="mini" data-act="trmk" data-arg="${t.id}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${t.id}|模糊">模糊</button><button class="mini bad" data-act="trmk" data-arg="${t.id}|不会">不会</button></span></div>
+          <span class="mbtns"><button class="mini" data-act="trmk" data-arg="${attr(t.id)}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${attr(t.id)}|模糊">模糊</button><button class="mini bad" data-act="trmk" data-arg="${attr(t.id)}|不会">不会</button></span></div>
         <details class="dbans"><summary class="enq">${wrapWords(esc(t.en))}</summary>
-          <div class="ansbox"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${t.id}" data-field="cn">${esc(t.cn || "")}</span></div></details>
+          <div class="ansbox"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${attr(t.id)}" data-field="cn">${esc(t.cn || "")}</span></div></details>
       </div>`;
     }).join("")}</div>
   </section>
 
   <section class="card">
     <div class="cardh">文献辅助工具</div>
-    <p class="muted">粘贴英文段落，获取精准学术翻译 + 面试可背诵金句提炼。</p>
+    <p class="muted">粘贴英文段落，获取学术翻译参考。提交后文本会发送到第三方翻译服务；请勿粘贴个人隐私、未公开论文或其他敏感内容，单次最多 3000 字符。</p>
     <textarea id="litInput" class="ed" placeholder="Paste English paragraph here..."></textarea>
     <div class="row">
       <button class="btn" data-act="litTranslate">学术翻译 + 金句提炼</button>
@@ -587,7 +605,7 @@ function viewVocab(){
    ============================================================ */
 function viewFocus(){
   const due = S.questions.filter(q => q.status === "不会");
-  const dueSched = dueReview(); // SM-2 到期待复习（含已掌握但到期的强化项）
+  const dueSched = dueReview().filter(q => q.status !== "不会"); // “不会”已有独立归档，避免重复展示
   const dbNo = [];
   S.docbank.sources.forEach(s => s.sections.forEach(sec => sec.items.forEach(it => { if(it.status === "不会") dbNo.push({src:s.title, it}); })));
   const vocabNo = S.vocab.filter(x => x.status === "不会");
@@ -611,10 +629,10 @@ function viewFocus(){
     dueHtml = `<section class="card"><div class="cardh">SM-2 到期待复习（${dueSched.length}）<span class="muted">— 掌握/模糊/不会 均按记忆曲线自动排期，标记后进入下一间隔</span></div>`
       + Object.keys(dg).map(cat => {
         return `<div class="ivcat">${catName(cat)}（${dg[cat].length}）</div><ul class="ivlist">` + dg[cat].map(q => {
-          const st = q.status || "未标记";
+          const st = safeStatus(q.status);
           return `<li class="qitem"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
-            <span class="mbtns"><button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button></span></div>
-            <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>${srcTag(q)}
+            <span class="mbtns"><button class="mini" data-act="mk" data-arg="${attr(q.id)}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${attr(q.id)}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${attr(q.id)}|不会">不会</button></span></div>
+            <div class="qq"><span class="editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="q">${esc(q.q)}</span></div>${srcTag(q)}
             <details class="dbans"><summary>参考答案<span class="muted">（下次复习 ${esc(q.nextReview || "—")}）</span></summary><div class="ansbox">${mdHtml(q.ans || "")}</div></details>
           </li>`;
         }).join("") + `</ul>`;
@@ -627,15 +645,15 @@ function viewFocus(){
     + masteryCard + dueHtml;
   Object.keys(groups).forEach(cat => {
     html += `<section class="card"><div class="cardh">${catName(cat)}（${groups[cat].length}）</div>` + groups[cat].map(q => {
-      const st = q.status || "未标记";
+      const st = safeStatus(q.status);
       return `<div class="qitem"><div class="qtop"><span class="cat">${catName(q.cat)}</span><span class="st st-${st}">${st}</span>
-        <span class="mbtns"><button class="mini" data-act="mk" data-arg="${q.id}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${q.id}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${q.id}|不会">不会</button><button class="mini" data-act="copyQans" data-arg="${q.id}">复制答案</button></span></div>
-        <div class="qq"><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="q">${esc(q.q)}</span></div>
+        <span class="mbtns"><button class="mini" data-act="mk" data-arg="${attr(q.id)}|掌握">掌握</button><button class="mini warn" data-act="mk" data-arg="${attr(q.id)}|模糊">模糊</button><button class="mini bad" data-act="mk" data-arg="${attr(q.id)}|不会">不会</button><button class="mini" data-act="copyQans" data-arg="${attr(q.id)}">复制答案</button></span></div>
+        <div class="qq"><span class="editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="q">${esc(q.q)}</span></div>
         ${srcTag(q)}
-        ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${q.id}" data-field="key">${esc(q.key)}</span></div>` : ""}
+        ${q.key ? `<div class="qqkey"><b>关键词：</b><span class="editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="key">${esc(q.key)}</span></div>` : ""}
         ${q.tip ? `<div class="qqtip"><b>加分：</b>${esc(q.tip)}</div>` : ""}
         ${q.pit ? `<div class="qqpit"><b>避坑：</b>${esc(q.pit)}</div>` : ""}
-        <details class="dbans"><summary>查看完整答案</summary><div class="ansbox editable" contenteditable="true" data-eid="${q.id}" data-field="ans">${mdHtml(q.ans || "")}</div></details>
+        <details class="dbans"><summary>查看完整答案</summary><div class="ansbox editable" contenteditable="true" data-eid="${attr(q.id)}" data-field="ans">${mdHtml(q.ans || "")}</div></details>
       </div>`;
     }).join("") + `</section>`;
   });
@@ -645,7 +663,7 @@ function viewFocus(){
     Object.keys(bySrc).forEach(t => {
       html += `<div class="ivcat">${esc(t)}（${bySrc[t].length}）</div><ul class="ivlist">` + bySrc[t].map(it => {
         return `<li class="qitem"><div class="qtop"><span class="cat">真题分区</span><span class="st st-不会">不会</span>
-          <span class="mbtns"><button class="mini" data-act="dbmk" data-arg="${it.id}|掌握">掌握</button><button class="mini warn" data-act="dbmk" data-arg="${it.id}|模糊">模糊</button></span></div>
+          <span class="mbtns"><button class="mini" data-act="dbmk" data-arg="${attr(it.id)}|掌握">掌握</button><button class="mini warn" data-act="dbmk" data-arg="${attr(it.id)}|模糊">模糊</button></span></div>
           <div class="qq">${esc(it.q)}</div>
           <details class="dbans"><summary>查看答案</summary><div class="ansbox">${mdHtml(it.ans || "")}</div></details></li>`;
       }).join("") + `</ul>`;
@@ -668,7 +686,7 @@ function viewFocus(){
     html += `<section class="card"><div class="cardh">文献翻译 · 不会（${trNo.length}）<span class="muted">— 来自文献翻译练习，标记掌握/模糊即移出</span></div><ul class="ivlist">`;
     html += trNo.map(t => {
       return `<li class="qitem"><div class="qtop"><span class="cat">翻译</span><span class="st st-不会">不会</span>
-        <span class="mbtns"><button class="mini" data-act="trmk" data-arg="${t.id}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${t.id}|模糊">模糊</button></span></div>
+        <span class="mbtns"><button class="mini" data-act="trmk" data-arg="${attr(t.id)}|掌握">掌握</button><button class="mini warn" data-act="trmk" data-arg="${attr(t.id)}|模糊">模糊</button></span></div>
         <div class="qq enq">${esc(t.en)}</div>
         <details class="dbans"><summary>查看参考译文</summary><div class="ansbox">${esc(t.cn || "")}</div></details></li>`;
     }).join("");
@@ -732,23 +750,23 @@ function viewDocBank(){
     s.sections.forEach(sec => {
       h += `<section class="card"><div class="cardh">${esc(sec.name)}（${sec.items.length}）</div>`;
       h += sec.items.map(it => {
-        const st = it.status || "未标记";
-        return `<div class="qitem dbitem" data-qid="${it.id}">
+        const st = safeStatus(it.status);
+        return `<div class="qitem dbitem" data-qid="${attr(it.id)}">
           <div class="qtop"><span class="dbid">#${esc(it.id)}</span>
             <span class="st st-${st}">${st}</span>
             <span class="mbtns">
-              <button class="mini" data-act="dbmk" data-arg="${it.id}|掌握">掌握</button>
-              <button class="mini warn" data-act="dbmk" data-arg="${it.id}|模糊">模糊</button>
-              <button class="mini bad" data-act="dbmk" data-arg="${it.id}|不会">不会</button>
-              <button class="mini" data-act="dbDel" data-arg="${it.id}">删除</button>
+              <button class="mini" data-act="dbmk" data-arg="${attr(it.id)}|掌握">掌握</button>
+              <button class="mini warn" data-act="dbmk" data-arg="${attr(it.id)}|模糊">模糊</button>
+              <button class="mini bad" data-act="dbmk" data-arg="${attr(it.id)}|不会">不会</button>
+              <button class="mini" data-act="dbDel" data-arg="${attr(it.id)}">删除</button>
             </span></div>
-          <div class="qq"><span class="editable" contenteditable="true" data-did="${it.id}" data-field="q">${esc(it.q)}</span></div>
+          <div class="qq"><span class="editable" contenteditable="true" data-did="${attr(it.id)}" data-field="q">${esc(it.q)}</span></div>
           <details class="dbans"><summary>查看 / 编辑答案</summary>
-            <div class="editable ansbox" contenteditable="true" data-did="${it.id}" data-field="ans">${mdHtml(it.ans || "")}</div>
+            <div class="editable ansbox" contenteditable="true" data-did="${attr(it.id)}" data-field="ans">${mdHtml(it.ans || "")}</div>
           </details>
         </div>`;
       }).join("");
-      h += `<button class="btn sm" data-act="dbAdd" data-arg="${s.id}|${esc(sec.name)}">+ 在本板块添加题目</button>`;
+      h += `<button class="btn sm" data-act="dbAdd" data-arg="${attr(s.id)}|${attr(encodeURIComponent(sec.name))}">+ 在本板块添加题目</button>`;
       h += `</section>`;
     });
     h += `</div>`;
@@ -763,7 +781,7 @@ function viewDocBank(){
   <section class="card">
     <div class="cardh">英语听力 · 随机抽题播报</div>
     <div class="row">
-      <button class="btn" onclick="enListenPick()">随机抽题并语音播报</button>
+      <button class="btn" data-act="enListenPick">随机抽题并语音播报</button>
       <span class="muted">用英语朗读一道英文面试题，再点题目/答案查看对照。</span>
     </div>
     <div id="enListenBox">${enListenHtml()}</div>

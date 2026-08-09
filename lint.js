@@ -15,7 +15,7 @@ const root = __dirname;
 
 /* 1. 语法检查全部 js 文件 */
 const jsFiles = fs.readdirSync(path.join(root, "js")).filter(f => f.endsWith(".js")).map(f => path.join(root, "js", f));
-jsFiles.push(path.join(root, "test.js"), path.join(root, "lint.js"));
+jsFiles.push(path.join(root, "sw.js"), path.join(root, "test.js"), path.join(root, "test-e2e.js"), path.join(root, "lint.js"), path.join(root, "scripts", "parse-qa.js"));
 console.log("\n== 语法检查 ==");
 jsFiles.forEach(f => {
   try{
@@ -30,6 +30,7 @@ jsFiles.forEach(f => {
 console.log("\n== PWA 缓存清单一致性 ==");
 const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf-8");
 const sw = fs.readFileSync(path.join(root, "sw.js"), "utf-8");
+const coreSrc = fs.readFileSync(path.join(root, "js", "core.js"), "utf-8");
 const scripts = [];
 const re = /<script src="([^"]+)"><\/script>/g;
 let m;
@@ -43,9 +44,41 @@ else ok("sw.js 覆盖全部 " + scripts.length + " 个脚本");
 if(extra.length){ bad("sw.js 预缓存了未引用的文件：" + extra.join(", ")); }
 else ok("sw.js 无多余缓存项");
 
+/* 2b. HTML/PWA 静态资源与 manifest 基础校验 */
+console.log("\n== HTML / Manifest / 静态资源 ==");
+try{
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf-8"));
+  if(!manifest.name || !manifest.start_url || !Array.isArray(manifest.icons)) bad("manifest 缺少 name/start_url/icons");
+  else ok("manifest.webmanifest JSON 与必需字段有效");
+  const indexTheme = (indexHtml.match(/<meta\s+name="theme-color"\s+content="([^"]+)"/) || [])[1];
+  if(indexTheme && manifest.theme_color && indexTheme.toLowerCase() === manifest.theme_color.toLowerCase()) ok("HTML 与 Manifest 主题色一致");
+  else bad("HTML 与 Manifest 主题色不一致");
+  const cssSrc = fs.readFileSync(path.join(root, "css", "styles.css"), "utf-8");
+  const cssBg = (cssSrc.match(/--bg:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+  if(cssBg && manifest.background_color && cssBg.toLowerCase() === manifest.background_color.toLowerCase()) ok("CSS 与 Manifest 背景色一致");
+  else bad("CSS 与 Manifest 背景色不一致");
+  const refs = [];
+  for(const x of indexHtml.matchAll(/(?:src|href)="([^"]+)"/g)){
+    const ref = x[1]; if(!/^(?:https?:|data:|#)/.test(ref)) refs.push(ref.replace(/^\.\//,""));
+  }
+  const missingRefs = refs.filter(ref => !fs.existsSync(path.join(root, ref)));
+  if(missingRefs.length) bad("index.html 引用了不存在的资源：" + missingRefs.join(", "));
+  else ok("index.html 本地资源引用全部存在");
+}catch(e){ bad("manifest/HTML 校验失败：" + e.message); }
+
+/* 2c. 所有 data-act 必须在 ACTIONS 中有处理器 */
+console.log("\n== 页面行为映射 ==");
+const uiSource = fs.readdirSync(path.join(root, "js")).filter(f => f.endsWith(".js"))
+  .map(f => fs.readFileSync(path.join(root, "js", f), "utf-8")).join("\n");
+const actionRefs = [...new Set(Array.from(uiSource.matchAll(/data-act=["']([A-Za-z0-9_]+)["']/g), x => x[1]))];
+const actionBlock = (coreSrc.match(/var ACTIONS\s*=\s*\{([\s\S]*?)\r?\n\};\r?\nfunction handle/) || [])[1] || "";
+const actionKeys = new Set(Array.from(actionBlock.matchAll(/^\s{2}([A-Za-z0-9_]+):\s*function/gm), x => x[1]));
+const missingActions = actionRefs.filter(a => !actionKeys.has(a));
+if(missingActions.length) bad("缺少 data-act 处理器：" + missingActions.join(", "));
+else ok(actionRefs.length + " 个 data-act 均有处理器");
+
 /* 3. sw.js 缓存版本号与 core.js 的 CONTENT_VER 一致（改内容忘更新缓存会缓存旧代码） */
 console.log("\n== SW 缓存版本一致性 ==");
-const coreSrc = fs.readFileSync(path.join(root, "js", "core.js"), "utf-8");
 const ver = (coreSrc.match(/const CONTENT_VER\s*=\s*(\d+)/) || [])[1];
 const cacheName = (sw.match(/const CACHE\s*=\s*"([^"]+)"/) || [])[1];
 if(ver && cacheName){

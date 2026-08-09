@@ -3,28 +3,42 @@
    ============================================================ */
 
 /* ---- 词汇闪卡 ---- */
-let vocabFlash = { mode:"en2cn", weakOnly:false, order:[], i:0, revealed:false };
+let vocabFlash = { mode:"en2cn", weakOnly:false, order:[], i:0, revealed:false, cardKey:"", direction:"en2cn" };
 function vfRenderCard(){
   const card = $("#vfCard"); if(!card) return;
   if(!vocabFlash.order.length){ card.innerHTML = '<span class="muted">选好模式后点「开始 / 重洗」</span>'; return; }
-  const pool = vfPool();
-  const v = pool[vocabFlash.order[vocabFlash.i]];
+  if(vocabFlash.i >= vocabFlash.order.length) vocabFlash.i = 0;
+  const key = vocabFlash.order[vocabFlash.i];
+  const v = S.vocab.find(x => x.term === key);
   if(!v){ card.innerHTML = '<span class="muted">无词汇</span>'; return; }
   let front, back;
-  if(vocabFlash.mode === "cn2en"){ front = v.term; back = v.en; }
-  else if(vocabFlash.mode === "mixed"){ if(Math.random() < 0.5){ front = v.en; back = v.term; } else { front = v.term; back = v.en; } }
+  if(vocabFlash.cardKey !== key){ vocabFlash.cardKey = key; vocabFlash.direction = vocabFlash.mode === "mixed" ? (Math.random() < 0.5 ? "en2cn" : "cn2en") : vocabFlash.mode; }
+  if(vocabFlash.direction === "cn2en"){ front = v.term; back = v.en; }
   else { front = v.en; back = v.term; }
   card.innerHTML = `<div class="vffront">${esc(front)}</div>
     <div class="vfback ${vocabFlash.revealed ? '' : 'hidden'}">${vocabFlash.revealed ? esc(back) : '（点「显示答案」查看）'}</div>`;
   const prog = $("#vfProg"); if(prog) prog.textContent = `第 ${vocabFlash.i + 1} / ${vocabFlash.order.length} 张`;
 }
-function vfMode(m){ vocabFlash.mode = m; flash("模式：" + (m === "en2cn" ? "英→中" : m === "cn2en" ? "中→英" : "混合")); if(vocabFlash.order.length) vfRenderCard(); }
+function vfMode(m){ vocabFlash.mode = m; vocabFlash.cardKey = ""; flash("模式：" + (m === "en2cn" ? "英→中" : m === "cn2en" ? "中→英" : "混合")); if(vocabFlash.order.length) vfRenderCard(); }
 function vfWeak(){ vocabFlash.weakOnly = !vocabFlash.weakOnly; flash( vocabFlash.weakOnly ? "已开启弱项模式（只背不会/模糊）" : "已关闭弱项模式（全部词汇）" ); vfStart(); }
 function vfPool(){ return vocabFlash.weakOnly ? S.vocab.filter(v => v.status === "不会" || v.status === "模糊") : S.vocab; }
-function vfStart(){ const pool = vfPool(); if(!pool.length){ flash(vocabFlash.weakOnly ? "弱项模式下暂无不会/模糊词汇" : "暂无词汇"); return; } vocabFlash.order = pool.map((v,i) => i); shuffle(vocabFlash.order); vocabFlash.i = 0; vocabFlash.revealed = false; vfRenderCard(); flash("已洗牌，开始背诵"); }
+function vfStart(){ const pool = vfPool(); if(!pool.length){ vocabFlash.order=[]; vocabFlash.i=0; vocabFlash.cardKey=""; vfRenderCard(); flash(vocabFlash.weakOnly ? "弱项模式下暂无不会/模糊词汇" : "暂无词汇"); return; } vocabFlash.order = pool.map(v => v.term); shuffle(vocabFlash.order); vocabFlash.i = 0; vocabFlash.revealed = false; vocabFlash.cardKey = ""; vfRenderCard(); flash("已洗牌，开始背诵"); }
 function vfReveal(){ vocabFlash.revealed = true; vfRenderCard(); }
-function vfNext(){ if(!vocabFlash.order.length) return; vocabFlash.i = (vocabFlash.i + 1) % vocabFlash.order.length; vocabFlash.revealed = false; vfRenderCard(); }
-function vfMark(st){ if(!vocabFlash.order.length) return; const pool = vfPool(); const realIdx = pool[vocabFlash.order[vocabFlash.i]] ? S.vocab.indexOf(pool[vocabFlash.order[vocabFlash.i]]) : -1; if(realIdx >= 0) markVocab(realIdx, st); flash("已标记：" + st); vfNext(); }
+function vfNext(){ if(!vocabFlash.order.length) return; vocabFlash.i = (vocabFlash.i + 1) % vocabFlash.order.length; vocabFlash.revealed = false; vocabFlash.cardKey = ""; vfRenderCard(); }
+function vfMark(st){
+  if(!vocabFlash.order.length) return;
+  const key = vocabFlash.order[vocabFlash.i];
+  const realIdx = S.vocab.findIndex(v => v.term === key);
+  if(realIdx >= 0) markVocab(realIdx, st);
+  flash("已标记：" + st);
+  if(vocabFlash.weakOnly && st === "掌握"){
+    vocabFlash.order.splice(vocabFlash.i, 1);
+    if(vocabFlash.i >= vocabFlash.order.length) vocabFlash.i = 0;
+    vocabFlash.revealed = false; vocabFlash.cardKey = "";
+    if(!vocabFlash.order.length){ vfRenderCard(); const prog=$("#vfProg"); if(prog) prog.textContent="本轮弱项已完成"; return; }
+    vfRenderCard();
+  }else vfNext();
+}
 
 /* ---- 文献翻译练习 ---- */
 let trFlash = { order:[], i:0, revealed:false };
@@ -34,15 +48,15 @@ function trRender(){
   const t = S.translate[trFlash.order[trFlash.i]];
   if(!t){ panel.innerHTML = '<span class="muted">无题目</span>'; return; }
   panel.innerHTML = `<div class="tren"><span class="lab">英译汉：</span>${wrapWords(esc(t.en))}</div>
-    <p class="muted">点击句子中任意单词可查中文释义、近义词/同根词并朗读发音。</p>
+    <p class="muted">点击句子中的单词，或用键盘聚焦后按回车，可查看释义、近义词与发音。</p>
     <textarea class="ed" id="trUser" placeholder="在此输入你的中文译文..."></textarea>
     <div class="row">
-      <button class="btn" onclick="trReveal()">查看参考译文</button>
-      <button class="btn alt" onclick="trNext()">下一题 ➡</button>
-      <button class="mini" onclick="trMark('掌握')">掌握</button>
-      <button class="mini bad" onclick="trMark('不会')">不会</button>
+      <button class="btn" data-act="trReveal">查看参考译文</button>
+      <button class="btn alt" data-act="trNext">下一题 ➡</button>
+      <button class="mini" data-act="trMark" data-arg="掌握">掌握</button>
+      <button class="mini bad" data-act="trMark" data-arg="不会">不会</button>
     </div>
-    <div id="trRef" class="trref" style="display:none"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${t.id}" data-field="cn">${esc(t.cn)}</span></div>`;
+    <div id="trRef" class="trref" style="display:none"><b>参考译文：</b><span class="editable" contenteditable="true" data-tid="${attr(t.id)}" data-field="cn">${esc(t.cn)}</span></div>`;
   const prog = $("#trProg"); if(prog) prog.textContent = `第 ${trFlash.i + 1} / ${trFlash.order.length} 题`;
   bindCommon();
 }
@@ -52,7 +66,7 @@ function trNext(){ if(!trFlash.order.length) return; trFlash.i = (trFlash.i + 1)
 function trMark(st){ if(!trFlash.order.length) return; const t = S.translate[trFlash.order[trFlash.i]]; if(t){ t.status = st; if(st === "掌握") t.nextReview = ""; else t.nextReview = addDays(todayStr(), 1); save(); } flash("已标记：" + st); trNext(); }
 
 /* ---- 点词查词弹窗（文献翻译练习专用） ---- */
-let __localDict = null, __dictCache = {};
+let __localDict = null, __dictCache = {}, __lookupSeq = 0, __lookupAbort = null;
 function buildLocalDict(){
   if(__localDict) return __localDict;
   __localDict = {};
@@ -67,7 +81,7 @@ function buildLocalDict(){
 function wrapWords(text){
   // 修复：不再用全局变量记录"最后一次渲染的句子"；
   // wordLookup 里通过 closest('.enq,.tren') 取点击词所在的真实句子。
-  return text.replace(/([A-Za-z][A-Za-z'-]*)/g, m => '<span class="wword">' + m + '</span>');
+  return text.replace(/([A-Za-z][A-Za-z'-]*)/g, m => '<button class="wword" type="button">' + m + '</button>');
 }
 function zhOf(clean, raw){
   if(typeof CHINESE_GLOSSARY === "object" && CHINESE_GLOSSARY){
@@ -107,26 +121,39 @@ function refreshWordPopBtn(){
   btn.textContent = isWB ? "已在重点复习 · 移出" : "标记为不会 · 加入重点复习";
 }
 function fetchWithRetry(url, opts, retries){
-  retries = retries || 1;
-  return fetch(url, opts).then(function(r){
+  if(retries == null) retries = 1;
+  opts = opts || {};
+  const externalSignal = opts.signal;
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const fetchOpts = Object.assign({}, opts);
+  delete fetchOpts.timeoutMs;
+  if(ctrl){
+    fetchOpts.signal = ctrl.signal;
+    if(externalSignal){ if(externalSignal.aborted) ctrl.abort(); else externalSignal.addEventListener("abort", function(){ ctrl.abort(); }, { once:true }); }
+  }
+  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, opts.timeoutMs || 8000) : null;
+  return fetch(url, fetchOpts).then(function(r){
+    if(timer) clearTimeout(timer);
     if(!r.ok && retries > 0){
       return new Promise(function(resolve){ setTimeout(resolve, 500); })
         .then(function(){ return fetchWithRetry(url, opts, retries - 1); });
     }
     return r.ok ? r.json() : null;
-  }).catch(function(){
-    if(retries > 0){
+  }).catch(function(err){
+    if(timer) clearTimeout(timer);
+    if(retries > 0 && !(externalSignal && externalSignal.aborted) && (!err || err.name !== "AbortError")){
       return new Promise(function(resolve){ setTimeout(resolve, 500); })
         .then(function(){ return fetchWithRetry(url, opts, retries - 1); });
     }
     return null;
   });
 }
-function lookupWord(clean){
+function lookupWord(clean, signal){
   // 并行查询：英文释义(音标/例句) + 中文翻译 + 近义词 + 同根词；各自独立降级，不阻塞渲染
-  var enP = fetchWithRetry("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(clean))
+  var req = { signal:signal, timeoutMs:8000 };
+  var enP = fetchWithRetry("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(clean), req)
     .then(function(d){ return d; }).catch(function(){ return null; });
-  var zhP = fetchWithRetry("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(clean) + "&langpair=en|zh-CN")
+  var zhP = fetchWithRetry("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(clean) + "&langpair=en|zh-CN", req)
     .then(function(d){
       var t = d && d.responseData && d.responseData.translatedText;
       if(!t || t === clean) return null;
@@ -135,9 +162,9 @@ function lookupWord(clean){
       return t;
     })
     .catch(function(){ return null; });
-  var synP = fetchWithRetry("https://api.datamuse.com/words?rel_syn=" + encodeURIComponent(clean) + "&max=8")
+  var synP = fetchWithRetry("https://api.datamuse.com/words?rel_syn=" + encodeURIComponent(clean) + "&max=8", req)
     .then(function(d){ return d || []; }).catch(function(){ return []; });
-  var derivP = fetchWithRetry("https://api.datamuse.com/words?sp=" + encodeURIComponent(clean) + "*&max=8")
+  var derivP = fetchWithRetry("https://api.datamuse.com/words?sp=" + encodeURIComponent(clean) + "*&max=8", req)
     .then(function(d){ return d || []; }).catch(function(){ return []; });
   return Promise.all([enP, zhP, synP, derivP]).then(function(res){ return { en: res[0], zh: res[1], syn: res[2], deriv: res[3] }; });
 }
@@ -157,6 +184,9 @@ function wordLookup(el){
   const local = __localDict[clean] || __localDict[raw.toLowerCase()];
   const localZh = zhOf(clean, raw) || (local ? local.term : null);
   const isWB = (S.wordBank || []).some(w => w.word === clean);
+  const seq = ++__lookupSeq;
+  if(__lookupAbort) __lookupAbort.abort();
+  __lookupAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
   const zhHtml = localZh
     ? `<div class="wpsec zhh" id="wpZhSec" data-zh="1"><div class="wplab">中文释义</div><div class="zhdef">${esc(localZh)}</div></div>`
     : `<div class="wpsec zhh" id="wpZhSec"><div class="wplab">中文释义</div><span class="muted">联网翻译中...</span></div>`;
@@ -178,9 +208,9 @@ function wordLookup(el){
   if(__dictCache[clean] != null){
     fillLookup(clean, __dictCache[clean]);
   } else {
-    lookupWord(clean)
-      .then(res => { __dictCache[clean] = res; fillLookup(clean, res); })
-      .catch(() => { __dictCache[clean] = false; fillLookup(clean, false); });
+    lookupWord(clean, __lookupAbort ? __lookupAbort.signal : undefined)
+      .then(res => { if(seq !== __lookupSeq || pop.getAttribute("data-cur") !== clean) return; __dictCache[clean] = res; fillLookup(clean, res); })
+      .catch(() => { if(seq !== __lookupSeq || pop.getAttribute("data-cur") !== clean) return; __dictCache[clean] = false; fillLookup(clean, false); });
   }
 }
 function fillLookup(clean, res){
@@ -282,8 +312,8 @@ function enListenHtml(){
   if(!enListen.q) return '<p class="muted">点「随机抽题并语音播报」，会用英语朗读一道英文面试题。</p>';
   return `<div class="qitem">
     <div class="qtop"><span class="cat">英文听力</span>
-      <span class="mbtns"><button class="mini" onclick="enListenSpeak()">再播报一次</button>
-      <button class="mini" onclick="enListenPick()">换一题</button></span></div>
+      <span class="mbtns"><button class="mini" data-act="enListenSpeak">再播报一次</button>
+      <button class="mini" data-act="enListenPick">换一题</button></span></div>
     <details class="dbans"><summary>点击查看题目（英文）</summary><div class="ansbox enq">${esc(enListen.q.q)}</div></details>
     <details class="dbans"><summary>点击查看答案</summary><div class="ansbox">${esc(enListen.q.ans || "")}</div></details>
   </div>`;
@@ -305,7 +335,7 @@ function pickEnVoice(){
 function enListenSpeak(){
   if(!enListen.q) return;
   try{
-    if(!window.speechSynthesis){ alert("当前浏览器不支持语音合成（TTS），建议用 Chrome / Edge。"); return; }
+    if(!window.speechSynthesis){ flash("当前浏览器不支持语音合成（TTS），建议用 Chrome / Edge。", "warn"); return; }
     window.speechSynthesis.cancel();
     const text = enListen.q.q;
     const chunks = text.split(/(?<=[.?!;])\s+/).filter(s => s.trim());
@@ -325,7 +355,7 @@ function enListenSpeak(){
 }
 function enListenPick(){
   const qs = S.questions.filter(q => q.cat === "英文");
-  if(!qs.length){ alert("暂无英文题"); return; }
+  if(!qs.length){ flash("暂无英文题", "warn"); return; }
   enListen.q = qs[Math.floor(Math.random() * qs.length)];
   const box = $("#enListenBox"); if(box) box.innerHTML = enListenHtml();
   enListenSpeak();
@@ -333,10 +363,15 @@ function enListenPick(){
 }
 
 /* ---- 文献翻译（调用在线翻译 API 逐句翻译，离线时降级提示） ---- */
-function litTranslate(){
+function litTranslate(confirmed){
   const inp = $("#litInput");
-  if(!inp || !inp.value.trim()){ alert("请先粘贴英文段落"); return; }
+  if(!inp || !inp.value.trim()){ flash("请先粘贴英文段落", "warn"); return; }
   const txt = inp.value.trim();
+  if(txt.length > 3000){ flash("单次翻译最多 3000 字符，请分段处理", "warn"); return; }
+  if(txt.length > 500 && !confirmed){
+    confirmModal("这段文字将发送到第三方翻译服务处理。请确认内容不含个人隐私、未公开论文或其他敏感信息。确定继续吗？", { title:"外部翻译服务提示" }, function(){ litTranslate(true); });
+    return;
+  }
   const o = $("#litOut");
   if(!o) return;
   o.innerHTML = `<div class="docout">
@@ -351,7 +386,7 @@ function litTranslate(){
     else buf = buf ? buf + " " + s : s;
   });
   if(buf) chunks.push(buf);
-  const translateChunk = c => fetchWithRetry("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(c) + "&langpair=en|zh-CN")
+  const translateChunk = c => fetchWithRetry("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(c) + "&langpair=en|zh-CN", { timeoutMs:10000 })
     .then(d => {
       const t = d && d.responseData && d.responseData.translatedText;
       if(!t || t === c) return null;

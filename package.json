@@ -5,8 +5,12 @@
   "scripts": {
     "lint": "node lint.js",
     "test": "node test.js",
+    "test:e2e": "node test-e2e.js",
     "dev": "python -m http.server 8000",
-    "gen:qa": "node scripts/parse-qa.js"
+    "gen:qa": "node scripts/parse-qa.js",
+    "check:qa": "node scripts/parse-qa.js --check"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "playwright": "1.62.0"
+  }
 }
